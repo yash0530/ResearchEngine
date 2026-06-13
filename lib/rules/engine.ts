@@ -1,8 +1,11 @@
 // Tripwire evaluation. Pure evaluators over an injectable RuleContext; the
 // Prisma-bound context and runAllRules live at the bottom.
+//
+// Tripwires are *signals*, not pages. A fire records a RuleEvent row; everything
+// downstream (the morning digest, the Signals view, the analyst snapshot) reads
+// those rows. Nothing is pushed to a phone — this is a check-once dashboard.
 
 import { prisma } from "../prisma";
-import { ntfyEnabled, sendNtfy } from "../notify";
 import { drawdownFromCloses, getCloses, round2 } from "../metrics";
 import { addDaysStr, todayStr } from "../dates";
 import { TRIPWIRES } from "../../config/tripwires";
@@ -115,8 +118,6 @@ export type RulesRunResult = {
   evaluated: number;
   fired: Fired[];
   suppressed: string[];
-  /** Critical pushes that were attempted (channel configured) but failed to send. */
-  pushFailed: number;
 };
 
 export async function runAllRules(opts: { dryRun?: boolean } = {}): Promise<RulesRunResult> {
@@ -162,26 +163,9 @@ export async function runAllRules(opts: { dryRun?: boolean } = {}): Promise<Rule
     fired.push(candidate);
   }
 
-  // Routing: only criticals page immediately (coalesced into one push); warns ride
-  // the morning digest and infos are UI-only. Count delivery failures (only when the
-  // channel is actually configured) so a dead ntfy pipe surfaces in the JobRun detail.
-  let pushFailed = 0;
-  if (!opts.dryRun) {
-    const criticals = fired.filter((f) => f.severity === "critical");
-    if (criticals.length && ntfyEnabled()) {
-      const ok = await sendNtfy({
-        severity: "critical",
-        title:
-          criticals.length > 1
-            ? `engine · ${criticals.length} critical tripwires`
-            : "engine tripwire",
-        message: criticals.map((f) => f.message).join("\n"),
-      });
-      if (!ok) pushFailed = criticals.length;
-    }
-  }
-
-  return { evaluated: TRIPWIRES.length, fired, suppressed, pushFailed };
+  // No routing/paging. Severity is retained on the RuleEvent so the digest and the
+  // Signals view can rank criticals above warns above infos — surfaced, never pushed.
+  return { evaluated: TRIPWIRES.length, fired, suppressed };
 }
 
 export async function runRulesJob(opts: { dryRun?: boolean } = {}): Promise<string> {
@@ -194,8 +178,5 @@ export async function runRulesJob(opts: { dryRun?: boolean } = {}): Promise<stri
   const suffix = result.suppressed.length
     ? `; cooloff-suppressed: ${result.suppressed.join(",")}`
     : "";
-  const pushNote = result.pushFailed
-    ? `; ntfy FAILED for ${result.pushFailed} critical alert(s)`
-    : "";
-  return `evaluated ${result.evaluated}${opts.dryRun ? " (dry-run)" : ""} — ${firedText}${suffix}${pushNote}`;
+  return `evaluated ${result.evaluated}${opts.dryRun ? " (dry-run)" : ""} — ${firedText}${suffix}`;
 }

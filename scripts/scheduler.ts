@@ -1,8 +1,9 @@
-// Long-running cron process. Every handler goes through runJob, so a failure
-// logs a JobRun row and pushes an ntfy warn instead of crashing the scheduler.
+// Long-running cron process. Every handler goes through runJob, so a failure logs
+// a JobRun row instead of crashing the scheduler — failures surface in the Ops job
+// log and the morning digest's data-health line, never as a push.
 //
 //   npm run scheduler        — start the daemon (use launchd/systemd to keep alive)
-//   npm run scheduler:test   — run every job once, in sequence, then exit
+//   npm run scheduler:test   — run the overnight pipeline + monthly once, then exit
 
 import "dotenv/config";
 
@@ -41,10 +42,9 @@ async function monthlyCatchupIfMissing() {
 }
 
 async function runTest() {
-  console.log("scheduler --test: running every job once…");
-  const order = ["prices", "news", "earnings", "rules", "nightly", "monthly", "morning"] as const;
+  console.log("scheduler --test: running the overnight pipeline + monthly once…");
   let failures = 0;
-  for (const name of order) {
+  for (const name of ["overnight", "monthly"] as const) {
     const result = await runJob(name, () => JOBS[name]({}));
     console.log(`  ${name}: ${result.ok ? "ok" : "FAIL"} — ${result.detail}`);
     if (!result.ok) failures += 1;
@@ -63,17 +63,13 @@ function startDaemon() {
   const s = settings.schedule;
   console.log("ENGINE scheduler starting. Jobs (local time):");
 
-  schedule("prices", s.prices, () => runJob("prices", () => JOBS.prices({})));
-  schedule("news", s.news, () => runJob("news", () => JOBS.news({})));
-  schedule("rules", s.rules, () => runJob("rules", () => JOBS.rules({})));
-  schedule("earnings", s.earnings, () => runJob("earnings", () => JOBS.earnings({})));
+  // One ordered pipeline overnight: prices→news→earnings→rules→nightly→digest. Each
+  // step records its own JobRun; a step failure is counted, not fatal.
+  schedule("overnight", s.overnight, () => runJob("overnight", () => JOBS.overnight({})));
 
-  schedule("nightly", s.nightly, () => runJob("nightly", () => JOBS.nightly({})));
-  // Monthly re-rate is its own job on the 1st — decoupled from nightly so a failed
-  // or missed nightly can't take it down (see monthlyCatchupIfMissing for the heal).
+  // Monthly re-rate stays decoupled from the nightly pipeline so a failed/missed run
+  // can't take it down (see monthlyCatchupIfMissing for the boot heal).
   schedule("monthly", s.monthly, () => runJob("monthly", () => JOBS.monthly({})));
-
-  schedule("morning", s.morning, () => runJob("morning", () => JOBS.morning({})));
 
   void heartbeat("boot");
   void monthlyCatchupIfMissing();

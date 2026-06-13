@@ -20,7 +20,7 @@ function ruleSummary(rule: (typeof TRIPWIRES)[number]): string {
   }
 }
 
-export default async function AlertsPage() {
+export default async function SignalsPage() {
   const events = await prisma.ruleEvent.findMany({
     orderBy: { firedAt: "desc" },
     take: 100,
@@ -39,11 +39,12 @@ export default async function AlertsPage() {
     <div className="space-y-6">
       <div className="page-header">
         <div>
-          <div className="eyebrow">Engine</div>
-          <h1 className="page-title">Alerts</h1>
+          <div className="eyebrow">Engine · signals</div>
+          <h1 className="page-title">Signals</h1>
           <p className="page-subtitle">
-            Tripwire fires, newest first. Acknowledge once you have re-read the relevant
-            kill criteria — the rule stays armed (cooloff aside).
+            Tripwire fires, newest first — surfaced here and in the morning digest, never
+            pushed to a phone. Acknowledge once you&apos;ve re-read the relevant kill criteria;
+            the rule stays armed (cooloff aside).
           </p>
         </div>
       </div>

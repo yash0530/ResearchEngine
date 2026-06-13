@@ -1,8 +1,9 @@
 // Every job — scheduled, CLI, API, or UI-triggered — runs through this wrapper:
-// one JobRun row per run, ntfy warn on failure, and it never throws.
+// one JobRun row per run, and it never throws. Failures are recorded to JobRun
+// (and surface in the Ops job log + the morning digest's data-health line) rather
+// than pushed anywhere — this is a check-once-a-morning dashboard, not a pager.
 
 import { prisma } from "../prisma";
-import { sendNtfy } from "../notify";
 
 export type JobResult = { ok: boolean; detail: string };
 
@@ -19,11 +20,6 @@ export async function runJob(name: string, fn: () => Promise<string>): Promise<J
     } catch {
       // even logging must not throw out of a job
     }
-    await sendNtfy({
-      severity: "warn",
-      title: "engine",
-      message: `engine job failed: ${name}: ${detail}`.slice(0, 500),
-    });
     return { ok: false, detail };
   }
 }

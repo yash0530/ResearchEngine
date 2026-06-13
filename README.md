@@ -1,20 +1,23 @@
 # ENGINE
 
 A personal AI-infrastructure investing **research** workstation. Twelve sectors mapped
-to a lifecycle (early → inflecting → popping → crowded → reset), daily price and news
-ingestion, tripwire alerts to your phone, a provider-agnostic LLM analyst that writes a
-nightly brief and proposes monthly stage re-rates, a catalyst calendar, and a journal.
+to a lifecycle (early → inflecting → popping → crowded → reset), an overnight ETL pipeline
+(price / news / earnings ingestion), tripwire risk signals, and a **deterministic morning
+digest** that synthesizes the board into ranked, provenance-backed insights — optionally
+narrated by a provider-agnostic LLM. Plus a catalyst calendar, a journal, and monthly stage
+re-rate proposals.
 
 > **This tool produces research, not investment advice. It places no orders and never will.**
 
-It has no broker integration and no order-placement code anywhere. Everything it does is
-read, compute, summarize, and notify.
+It has no broker integration and no order-placement code anywhere. It is **dashboard-first**:
+you read it once each morning — there is no phone push. Everything it does is read, compute,
+and synthesize, with every synthesized claim traceable to a computed number or a dated source.
 
 ## Stack
 
 Next.js 16 · React 19 · Tailwind 4 · Prisma 6 + SQLite (WAL) · recharts · yahoo-finance2 ·
-zod · vitest. The LLM and ntfy calls use plain `fetch` — no SDKs. The only ingestion deps
-beyond the web stack are `rss-parser` and `node-cron`.
+zod · vitest. LLM calls use plain `fetch` — no SDKs. The only ingestion deps beyond the web
+stack are `rss-parser` and `node-cron`.
 
 ## Quick start
 
@@ -39,8 +42,7 @@ Open the board: 12 sector cards distributed across the five stage columns, each 
 |---|---|
 | `DATABASE_URL` | SQLite path; default `file:./dev.db?connection_limit=1` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` / `GEMINI_API_KEY` | only the providers you use |
-| `ANALYST_ENABLED` | `false` until you add a key; flip to `true` to run briefs/re-rates |
-| `NTFY_ENABLED` / `NTFY_URL` / `NTFY_TOPIC` | phone push via [ntfy](https://ntfy.sh); pick an unguessable topic and subscribe in the app |
+| `ANALYST_ENABLED` | `false` runs the deterministic digest only; `true` adds the LLM brief + digest narration + re-rates |
 | `ENGINE_TZ` | optional IANA tz for the scheduler (empty = system local) |
 
 Everything else is typed code in `config/`:
@@ -60,8 +62,10 @@ Two protocol adapters cover the whole ecosystem:
 To use any provider: add or edit a profile in `config/providers.ts`, point
 `config/settings.ts` `analyst.nightly` / `.monthly` / `.event` at it, and put the key in
 `.env` under the name in `apiKeyEnv` (or `null` for keyless local servers). **No code
-changes.** Defaults ship as Anthropic `claude-haiku-4-5` (nightly) and `claude-sonnet-4-6`
-(monthly re-rate).
+changes.** The shipped default points all analyst roles at Gemini `gemini-3.1-flash-lite`
+(the `gemini_compat` profile); bump that one line to `gemini-3.5-flash` or another provider
+for stronger synthesis. The deterministic digest needs no provider at all — the LLM only
+narrates facts it has already computed.
 
 | You want | protocol | baseUrl | key env | notes |
 |---|---|---|---|---|
@@ -77,10 +81,12 @@ Model ids and base URLs drift — verify against each provider's docs.
 
 One registry (`lib/jobs/registry.ts`) backs the scheduler, the CLI, the `/api/jobs/*`
 route, and the Ops page — "run now" anywhere is the same code path. Every job is wrapped:
-it writes a `JobRun` row, pushes an ntfy warn on failure, and never throws.
+it writes a `JobRun` row and never throws. The `overnight` job runs the whole chain in order
+(prices → news → earnings → rules → nightly → morning digest); a failed step is counted, not
+fatal.
 
 ```bash
-npm run job -- <prices|news|earnings|rules|nightly|monthly|morning|backup>
+npm run job -- <overnight|prices|news|earnings|rules|nightly|monthly|morning|backup>
 npm run job -- prices --backfill=400      # widen the heal window for initial history
 npm run job -- rules --dry-run            # evaluate tripwires without firing/recording
 npm run job -- nightly --provider=ollama_local   # one-off provider override
@@ -94,10 +100,10 @@ npm run scheduler         # long-running daemon (local-time cron)
 npm run scheduler:test    # run every job once, in sequence, then exit
 ```
 
-Default schedule: prices 22:30 · news 23:00 · rules 23:30 · nightly brief 23:45 · earnings
-Sat 10:00 · morning push 07:30 · monthly re-rate after the nightly slot on the last day of
-the month. A daily SQLite backup (`VACUUM INTO data/backups/`) runs inside the prices job,
-keeping the newest 14.
+Default schedule: one **overnight pipeline** at 03:00 — prices → news → earnings → rules →
+nightly brief → morning digest, in order — plus the monthly stage re-rate on the 1st at 08:00.
+A daily SQLite backup (`VACUUM INTO data/backups/`) runs inside the prices step, keeping the
+newest 14.
 
 **Keep it alive on macOS (launchd):**
 
@@ -115,13 +121,14 @@ by the most recent `JobRun`.
 
 ## Pages
 
-**Board** (the hero: sectors placed in their stage columns) · **Sector** (members table,
-news, catalysts, stage re-rate) · **Tickers** / **Ticker** (price chart, metrics, position,
-journal) · **Alerts** (tripwire fires, acknowledge) · **Briefs** (analyst archive with full
-audit trail) · **Calendar** (catalyst CRUD) · **News** · **Journal** (positions + thesis /
-invalidation entries) · **Series** (the hand-entered fundamentals the tripwires read) ·
-**Re-rate** (apply analyst stage proposals — the human-only action) · **Ops** (run jobs,
-event mode, ntfy test, job log, backups).
+**Morning** (the hero: the synthesized digest — ranked signals with provenance, the capex
+backdrop, an optional LLM editor's note — above the live stage board) · **Sector** (members
+table, news, catalysts, stage re-rate) · **Tickers** / **Ticker** (price chart, metrics,
+position, journal) · **Signals** (tripwire fires, acknowledge — surfaced, never pushed) ·
+**Briefs** (analyst archive with full audit trail) · **Calendar** (catalyst CRUD) · **News** ·
+**Journal** (positions + thesis / invalidation entries) · **Series** (the hand-entered
+fundamentals the tripwires read) · **Re-rate** (apply analyst stage proposals — the human-only
+action) · **Ops** (run jobs incl. the overnight pipeline, event mode, job log, backups).
 
 ## Workflow notes
 

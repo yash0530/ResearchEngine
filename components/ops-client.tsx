@@ -4,16 +4,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
-import { runEventModeAction, testNtfyAction, resetDatabaseAction } from "@/app/actions";
+import { runEventModeAction, resetDatabaseAction } from "@/app/actions";
 
 const JOB_BUTTONS: { name: string; label: string; note?: string }[] = [
+  { name: "overnight", label: "Overnight pipeline", note: "runs the full chain in order" },
   { name: "prices", label: "Prices", note: "daily closes + backup" },
   { name: "news", label: "News" },
   { name: "earnings", label: "Earnings", note: "slow — ~1/sec" },
   { name: "rules", label: "Rules" },
   { name: "nightly", label: "Nightly brief", note: "needs a key" },
   { name: "monthly", label: "Monthly re-rate", note: "needs a key" },
-  { name: "morning", label: "Morning push" },
+  { name: "morning", label: "Morning digest", note: "builds the dashboard digest" },
   { name: "backup", label: "Backup" },
 ];
 
@@ -61,14 +62,6 @@ export function OpsClient() {
     } finally {
       setRunning(null);
     }
-  }
-
-  const testNtfy = () => {
-    startTransition(async () => {
-      const ok = await testNtfyAction();
-      if (ok) toast.success("ntfy push sent — check your phone");
-      else toast.error("ntfy not sent (disabled, no topic, or unreachable)");
-    });
   }
 
   function runEvent() {
@@ -134,16 +127,6 @@ export function OpsClient() {
         >
           {pending ? "Analyzing…" : "Run event analysis"}
         </button>
-      </div>
-
-      <div className="panel panel-pad">
-        <h2 className="mb-2 text-sm font-semibold">Notifications</h2>
-        <button type="button" className="btn" disabled={pending || resetting} onClick={testNtfy}>
-          Send test push
-        </button>
-        <p className="muted mt-2 text-xs">
-          Configure NTFY_ENABLED / NTFY_TOPIC in .env and subscribe to the topic in the ntfy app.
-        </p>
       </div>
 
       <div className="panel panel-pad border-[color-mix(in_srgb,var(--bad)_40%,transparent)] bg-[color-mix(in_srgb,var(--bad)_3%,transparent)]">

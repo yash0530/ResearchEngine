@@ -23,6 +23,13 @@ export type MonthlyRerate = z.infer<typeof MonthlyRerateSchema>;
 // The snapshot is the ONLY model input. Schema doubles as a smoke-test contract.
 export const SnapshotSchema = z.object({
   date: z.string().nullable(),
+  // Macro anchor: the hyperscaler basket funds Driver-1 (8 of 12 sectors); HYG/IEF is the
+  // financing-stress proxy. Sectors are read RELATIVE to this, not in isolation.
+  market: z.object({
+    hyperscaler_1d: z.number().nullable(),
+    hyperscaler_30d: z.number().nullable(),
+    credit_30d: z.number().nullable(),
+  }),
   sectors: z.array(
     z.object({
       code: z.string(),
@@ -32,6 +39,8 @@ export const SnapshotSchema = z.object({
       avg_1d: z.number().nullable(),
       avg_7d: z.number().nullable(),
       avg_30d: z.number().nullable(),
+      // 30d sector move minus the hyperscaler basket — the picks-and-shovels-vs-buyers tell.
+      vs_hyperscaler_30d: z.number().nullable(),
     }),
   ),
   top_movers: z.array(

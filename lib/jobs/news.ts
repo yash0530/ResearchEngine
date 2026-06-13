@@ -13,6 +13,8 @@ type Item = {
   pubDate?: string;
   isoDate?: string;
   sourceName?: unknown;
+  contentSnippet?: string;
+  content?: string;
 };
 
 const parser: Parser<Record<string, unknown>, Item> = new Parser({
@@ -44,6 +46,15 @@ function cleanTitle(title: string, source: string | null): string {
   return title;
 }
 
+/** RSS description → compact plain text. Drop it when it's empty or just the title;
+ *  synthesis and the analyst snapshot read this for context beyond the headline. */
+function cleanSnippet(raw: string | undefined, title: string): string | null {
+  if (!raw) return null;
+  const text = raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  if (!text || text === title) return null;
+  return text.slice(0, 400);
+}
+
 export async function runNews(): Promise<string> {
   let added = 0;
   const failed: string[] = [];
@@ -64,12 +75,14 @@ export async function runNews(): Promise<string> {
         const publishedRaw = item.isoDate ?? item.pubDate;
         const publishedAt = publishedRaw ? new Date(publishedRaw) : null;
         const source = sourceText(item.sourceName);
+        const title = cleanTitle(item.title, source);
         try {
           await prisma.newsItem.create({
             data: {
               urlHash,
               url: item.link,
-              title: cleanTitle(item.title, source),
+              title,
+              snippet: cleanSnippet(item.contentSnippet ?? item.content, title),
               source,
               sectorCode: sector.code,
               publishedAt:

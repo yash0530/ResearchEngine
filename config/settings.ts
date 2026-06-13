@@ -11,15 +11,13 @@ export const settings = {
   analyst: {
     enabled: envBool("ANALYST_ENABLED", true),
     // Provider profile names from config/providers.ts — switching providers is
-    // an edit here (or a profile edit there), never a code change.
-    nightly: "anthropic",
-    monthly: "anthropic_strong",
-    event: "anthropic",
-  },
-  ntfy: {
-    enabled: envBool("NTFY_ENABLED", false),
-    url: process.env.NTFY_URL || "https://ntfy.sh",
-    topic: process.env.NTFY_TOPIC || "",
+    // an edit here (or a profile edit there), never a code change. All three roles
+    // run on Gemini flash-lite today (the only key on file). When 3.5-flash quota lands,
+    // point `monthly` at the pre-staged `gemini_strong` profile — a one-line change. The
+    // deterministic digest does not depend on any of this — the LLM only *enriches* facts.
+    nightly: "gemini_compat",
+    monthly: "gemini_compat",
+    event: "gemini_compat",
   },
   prices: {
     healWindowDays: 5, // daily pull re-fetches this many days to heal gaps
@@ -39,14 +37,11 @@ export const settings = {
     keep: 14,
   },
   schedule: {
-    // node-cron expressions, local time (day-of-week: 0=Sun … 6=Sat).
-    prices: "30 22 * * *",
-    news: "0 23 * * *",
-    rules: "30 23 * * *",
-    nightly: "45 23 * * *",
-    monthly: "0 8 1 * *", // 1st of month 08:00 — decoupled from nightly (own cron + boot catch-up)
-    earnings: "0 6 * * *", // daily — a mid-week earnings date shouldn't wait for Saturday
-    morning: "30 7 * * *",
+    // node-cron expressions, local time (day-of-week: 0=Sun … 6=Sat). One ordered
+    // overnight pipeline (prices→news→earnings→rules→nightly→digest) keeps the morning
+    // dashboard coherent and fresh; the monthly stage re-rate stays on its own cadence.
+    overnight: "0 3 * * *", // 03:00 — late enough for end-of-day data to settle
+    monthly: "0 8 1 * *", // 1st of month 08:00 — decoupled (own cron + boot catch-up)
     timezone: process.env.ENGINE_TZ || undefined,
   },
 };

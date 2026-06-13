@@ -94,23 +94,52 @@ describe("assembleSnapshot", () => {
     expect(snap.top_movers[0]).toMatchObject({ symbol: "AVGO", sector: "01" });
   });
 
-  it("caps headlines at 3 per sector and formats title — source", () => {
+  it("caps headlines at 5 per sector, formats title — source, appends snippet", () => {
     const snap = assembleSnapshot(
       inputs({
         headlinesBySector: new Map([
           [
             "00",
             [
-              { title: "A", source: "Reuters" },
+              { title: "A", source: "Reuters", snippet: "detail a" },
               { title: "B", source: null },
               { title: "C", source: "WSJ" },
               { title: "D", source: "FT" },
+              { title: "E", source: null },
+              { title: "F", source: "Bloomberg" },
             ],
           ],
         ]),
       }),
     );
-    expect(snap.headlines["00"]).toEqual(["A — Reuters", "B", "C — WSJ"]);
+    expect(snap.headlines["00"]).toEqual([
+      "A — Reuters :: detail a",
+      "B",
+      "C — WSJ",
+      "D — FT",
+      "E",
+    ]);
+  });
+
+  it("computes the hyperscaler basket and per-sector divergence", () => {
+    const closesBySymbol = new Map<string, CloseRow[]>([
+      ["MU", trending(40, 2)],
+      ["MSFT", trending(40, 0.5)],
+      ["AMZN", trending(40, 0.5)],
+      ["HYG", flat(40)],
+      ["IEF", flat(40)],
+    ]);
+    const snap = assembleSnapshot(
+      inputs({
+        sectors: [{ code: "00", name: "Memory", stage: "popping", driver: 1, members: ["MU"] }],
+        closesBySymbol,
+      }),
+    );
+    expect(snap.market.hyperscaler_30d).not.toBeNull();
+    expect(snap.market.credit_30d).toBeCloseTo(0, 1); // flat HYG/IEF ratio
+    // MU (+2%/day) far outruns the +0.5%/day hyperscaler basket → large positive divergence.
+    expect(snap.sectors[0].vs_hyperscaler_30d).not.toBeNull();
+    expect(snap.sectors[0].vs_hyperscaler_30d!).toBeGreaterThan(0);
   });
 
   it("keeps the serialized snapshot small", () => {

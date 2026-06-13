@@ -2,13 +2,20 @@
 // lists are capped, floats rounded — never summarized by another model call.
 
 import { prisma } from "../prisma";
-import { meanOrNull, pctChangeFromCloses, type CloseRow } from "../metrics";
+import { despike, meanOrNull, pctChangeFromCloses, round2, type CloseRow } from "../metrics";
 import { addDaysStr, todayStr } from "../dates";
+import { BENCHMARKS } from "../../config/sectors";
 import type { Snapshot } from "./schemas";
 
 const TOP_MOVERS = 15;
-const HEADLINES_PER_SECTOR = 3;
+const HEADLINES_PER_SECTOR = 5;
 const CATALYST_WINDOW_DAYS = 14;
+
+// Benchmarks split into the capex basket (hyperscalers) and the credit pair (HYG/IEF).
+const CREDIT = { a: "HYG", b: "IEF" };
+const HYPERSCALERS = BENCHMARKS.map((b) => b.symbol).filter(
+  (s) => s !== CREDIT.a && s !== CREDIT.b,
+);
 
 export type SnapshotInputs = {
   maxDate: string | null;
@@ -21,25 +28,51 @@ export type SnapshotInputs = {
   }[];
   closesBySymbol: Map<string, CloseRow[]>;
   firedRules: { rule_id: string; severity: string; message: string; fired_at: string }[];
-  headlinesBySector: Map<string, { title: string; source: string | null }[]>;
+  headlinesBySector: Map<string, { title: string; source: string | null; snippet?: string | null }[]>;
   catalysts: { d: string; kind: string; symbol: string | null; title: string }[];
   manualLatest: Record<string, { d: string; value: number }>;
 };
+
+/** Ratio (a/b) percent change over ~lookback shared dates — the credit_proxy math. */
+function creditRatioChange(a: CloseRow[], b: CloseRow[], lookback = 30): number | null {
+  const byB = new Map(b.map((r) => [r.d, r.close]));
+  const ratios: number[] = [];
+  for (const r of a.slice(-lookback)) {
+    const bv = byB.get(r.d);
+    if (bv) ratios.push(r.close / bv);
+  }
+  if (ratios.length < 5) return null;
+  return round2((ratios[ratios.length - 1] / ratios[0] - 1) * 100);
+}
 
 /** Pure assembly — unit-testable with fixture inputs. */
 export function assembleSnapshot(inputs: SnapshotInputs): Snapshot {
   const pct = (symbol: string, days: number) =>
     pctChangeFromCloses(inputs.closesBySymbol.get(symbol) ?? [], days);
 
-  const sectors = inputs.sectors.map((s) => ({
-    code: s.code,
-    name: s.name,
-    stage: s.stage,
-    driver: s.driver,
-    avg_1d: meanOrNull(s.members.map((m) => pct(m, 1))),
-    avg_7d: meanOrNull(s.members.map((m) => pct(m, 7))),
-    avg_30d: meanOrNull(s.members.map((m) => pct(m, 30))),
-  }));
+  const hyperscaler_1d = meanOrNull(HYPERSCALERS.map((s) => pct(s, 1)));
+  const hyperscaler_30d = meanOrNull(HYPERSCALERS.map((s) => pct(s, 30)));
+  const credit_30d = creditRatioChange(
+    inputs.closesBySymbol.get(CREDIT.a) ?? [],
+    inputs.closesBySymbol.get(CREDIT.b) ?? [],
+  );
+
+  const sectors = inputs.sectors.map((s) => {
+    const avg_30d = meanOrNull(s.members.map((m) => pct(m, 30)));
+    return {
+      code: s.code,
+      name: s.name,
+      stage: s.stage,
+      driver: s.driver,
+      avg_1d: meanOrNull(s.members.map((m) => pct(m, 1))),
+      avg_7d: meanOrNull(s.members.map((m) => pct(m, 7))),
+      avg_30d,
+      vs_hyperscaler_30d:
+        avg_30d !== null && hyperscaler_30d !== null
+          ? round2(avg_30d - hyperscaler_30d)
+          : null,
+    };
+  });
 
   const primarySector = new Map<string, string>();
   for (const s of inputs.sectors) {
@@ -57,13 +90,15 @@ export function assembleSnapshot(inputs: SnapshotInputs): Snapshot {
   const headlines: Record<string, string[]> = {};
   for (const [code, items] of inputs.headlinesBySector) {
     if (items.length === 0) continue;
-    headlines[code] = items
-      .slice(0, HEADLINES_PER_SECTOR)
-      .map((h) => (h.source ? `${h.title} — ${h.source}` : h.title));
+    headlines[code] = items.slice(0, HEADLINES_PER_SECTOR).map((h) => {
+      const head = h.source ? `${h.title} — ${h.source}` : h.title;
+      return h.snippet ? `${head} :: ${h.snippet.slice(0, 140)}` : head;
+    });
   }
 
   return {
     date: inputs.maxDate,
+    market: { hyperscaler_1d, hyperscaler_30d, credit_30d },
     sectors,
     top_movers,
     fired_rules_7d: inputs.firedRules,
@@ -102,7 +137,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
 
   const maxDate = maxPriceRow?.d ?? null;
 
-  // One bulk price query covering the 30d metric window, grouped in memory.
+  // One bulk price query covering the 30d metric window plus the benchmark basket.
   const closesBySymbol = new Map<string, CloseRow[]>();
   if (maxDate) {
     const priceRows = await prisma.price.findMany({
@@ -115,6 +150,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
       if (!arr) closesBySymbol.set(row.symbol, (arr = []));
       arr.push({ d: row.d, close: row.close });
     }
+    for (const [sym, arr] of closesBySymbol) closesBySymbol.set(sym, despike(arr));
   }
 
   const membersBySector = new Map<string, string[]>();
@@ -124,12 +160,16 @@ export async function buildSnapshot(): Promise<Snapshot> {
     arr.push(link.symbol);
   }
 
-  const headlinesBySector = new Map<string, { title: string; source: string | null }[]>();
+  const headlinesBySector = new Map<
+    string,
+    { title: string; source: string | null; snippet?: string | null }[]
+  >();
   for (const item of news) {
     if (!item.sectorCode) continue;
     let arr = headlinesBySector.get(item.sectorCode);
     if (!arr) headlinesBySector.set(item.sectorCode, (arr = []));
-    if (arr.length < HEADLINES_PER_SECTOR) arr.push({ title: item.title, source: item.source });
+    if (arr.length < HEADLINES_PER_SECTOR)
+      arr.push({ title: item.title, source: item.source, snippet: item.snippet });
   }
 
   const manualLatest: Record<string, { d: string; value: number }> = {};

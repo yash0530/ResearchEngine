@@ -3,6 +3,7 @@
 
 import { prisma } from "./prisma";
 import {
+  despike,
   drawdownFromCloses,
   meanOrNull,
   pctChangeFromCloses,
@@ -11,6 +12,7 @@ import {
 } from "./metrics";
 import { addDaysStr, daysBetween, todayStr } from "./dates";
 import { fetchLiveTickerStats } from "./yahoo";
+import type { DigestData } from "./research/synthesize";
 import {
   calculateSMA,
   calculateRSI,
@@ -63,6 +65,7 @@ async function bulkCloses(sinceDays: number): Promise<{
     if (!arr) bySymbol.set(row.symbol, (arr = []));
     arr.push({ d: row.d, close: row.close });
   }
+  for (const [sym, arr] of bySymbol) bySymbol.set(sym, despike(arr));
   return { maxDate: maxRow.d, bySymbol };
 }
 
@@ -153,30 +156,20 @@ export type BoardSector = {
 };
 
 export async function loadBoardPage() {
-  const [{ maxDate, bySymbol }, sectors, links, tickers, unacked, latestBrief, catalysts] =
-    await Promise.all([
-      bulkCloses(50),
-      prisma.sector.findMany({ orderBy: { code: "asc" } }),
-      prisma.tickerSector.findMany({
-        where: { ticker: { active: true } },
-        select: { symbol: true, sectorCode: true },
-      }),
-      prisma.ticker.findMany({ select: { symbol: true, name: true } }),
-      prisma.ruleEvent.findMany({
-        where: { acked: false },
-        orderBy: { firedAt: "desc" },
-        take: 6,
-      }),
-      prisma.brief.findFirst({
-        where: { kind: "nightly", ok: true },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.catalyst.findMany({
-        where: { d: { gte: todayStr(), lte: addDaysStr(todayStr(), 14) } },
-        orderBy: { d: "asc" },
-        take: 6,
-      }),
-    ]);
+  const [{ maxDate, bySymbol }, sectors, links, tickers, catalysts] = await Promise.all([
+    bulkCloses(50),
+    prisma.sector.findMany({ orderBy: { code: "asc" } }),
+    prisma.tickerSector.findMany({
+      where: { ticker: { active: true } },
+      select: { symbol: true, sectorCode: true },
+    }),
+    prisma.ticker.findMany({ select: { symbol: true, name: true } }),
+    prisma.catalyst.findMany({
+      where: { d: { gte: todayStr(), lte: addDaysStr(todayStr(), 14) } },
+      orderBy: { d: "asc" },
+      take: 6,
+    }),
+  ]);
 
   const nameBySymbol = new Map(tickers.map((t) => [t.symbol, t.name]));
   const membersBySector = new Map<string, string[]>();
@@ -222,28 +215,44 @@ export async function loadBoardPage() {
     .sort((a, b) => Math.abs(b.pct1d) - Math.abs(a.pct1d))
     .slice(0, 15);
 
-  const briefExcerpt = latestBrief ? parseBriefMd(latestBrief.outputJson) : null;
-
   return {
     asOf: maxDate,
     ageDays: maxDate ? daysBetween(maxDate, todayStr()) : null,
     sectors: boardSectors,
     topMovers,
-    unacked,
-    latestBrief: latestBrief
-      ? { id: latestBrief.id, createdAt: latestBrief.createdAt, briefMd: briefExcerpt }
-      : null,
     catalysts,
   };
 }
 
-function parseBriefMd(outputJson: string): string | null {
+// ── Morning digest ─────────────────────────────────────────────────────────
+
+export type LatestDigest = {
+  id: number;
+  createdAt: Date;
+  data: DigestData;
+  llmMd: string | null;
+  llmProvider: string | null;
+  llmModel: string | null;
+};
+
+/** The persisted morning synthesis the home page renders as its hero. */
+export async function loadLatestDigest(): Promise<LatestDigest | null> {
+  const row = await prisma.digest.findFirst({ orderBy: { createdAt: "desc" } });
+  if (!row) return null;
+  let data: DigestData;
   try {
-    const parsed = JSON.parse(outputJson) as { brief_md?: string };
-    return parsed.brief_md ?? null;
+    data = JSON.parse(row.dataJson) as DigestData;
   } catch {
-    return null;
+    return null; // malformed row — treat as "no digest yet" rather than crash the page
   }
+  return {
+    id: row.id,
+    createdAt: row.createdAt,
+    data,
+    llmMd: row.llmMd,
+    llmProvider: row.llmProvider,
+    llmModel: row.llmModel,
+  };
 }
 
 // ── Sector detail ────────────────────────────────────────────────────────────
@@ -329,10 +338,12 @@ export async function loadTickerDetail(symbol: string) {
     fetchLiveTickerStats(yfSymbol),
   ]);
 
-  const closes: CloseRow[] = prices
-    .slice()
-    .reverse()
-    .map((p) => ({ d: p.d, close: p.close }));
+  const closes: CloseRow[] = despike(
+    prices
+      .slice()
+      .reverse()
+      .map((p) => ({ d: p.d, close: p.close })),
+  );
   const last = prices[0] ?? null;
 
   const sectorCodes = ticker.sectorLinks.map((l) => l.sectorCode);

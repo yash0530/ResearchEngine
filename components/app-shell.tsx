@@ -5,27 +5,50 @@ import {
   BookOpen,
   Calendar,
   FileText,
-  LayoutGrid,
   Newspaper,
   Radar,
   Scale,
+  Sparkles,
   TrendingUp,
   Wrench,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const nav = [
-  { href: "/", label: "Board", icon: LayoutGrid },
-  { href: "/tickers", label: "Tickers", icon: TrendingUp },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/briefs", label: "Briefs", icon: FileText },
-  { href: "/calendar", label: "Calendar", icon: Calendar },
-  { href: "/news", label: "News", icon: Newspaper },
-  { href: "/journal", label: "Journal", icon: BookOpen },
-  { href: "/series", label: "Series", icon: Activity },
-  { href: "/rerate", label: "Re-rate", icon: Scale },
-  { href: "/ops", label: "Ops", icon: Wrench },
+type NavItem = { href: string; label: string; icon: typeof Sparkles };
+
+// Grouped so the daily surface (Morning/Signals/Tickers) sits apart from research,
+// position-keeping, and system tools — fewer things competing for attention at a glance.
+const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { href: "/", label: "Morning", icon: Sparkles },
+      { href: "/signals", label: "Signals", icon: Bell },
+      { href: "/tickers", label: "Tickers", icon: TrendingUp },
+    ],
+  },
+  {
+    heading: "Research",
+    items: [
+      { href: "/briefs", label: "Briefs", icon: FileText },
+      { href: "/news", label: "News", icon: Newspaper },
+      { href: "/calendar", label: "Calendar", icon: Calendar },
+    ],
+  },
+  {
+    heading: "Positions",
+    items: [
+      { href: "/journal", label: "Journal", icon: BookOpen },
+      { href: "/series", label: "Series", icon: Activity },
+      { href: "/rerate", label: "Re-rate", icon: Scale },
+    ],
+  },
+  {
+    heading: "System",
+    items: [{ href: "/ops", label: "Ops", icon: Wrench }],
+  },
 ];
+
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -47,20 +70,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <ThemeToggle />
         </div>
-        <nav className="space-y-1">
-          {nav.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--text)]"
-              >
-                <Icon size={16} />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="space-y-5">
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} className="space-y-1">
+              {group.heading ? (
+                <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  {group.heading}
+                </div>
+              ) : null}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--text)]"
+                  >
+                    <Icon size={16} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
@@ -76,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
           <nav className="flex gap-2 overflow-x-auto pb-1">
-            {nav.map((item) => (
+            {ALL_ITEMS.map((item) => (
               <Link key={item.href} href={item.href} className="shrink-0 rounded-md border border-[var(--border)] px-3 py-1.5 text-xs">
                 {item.label}
               </Link>

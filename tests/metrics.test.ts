@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  despike,
   drawdownFromCloses,
   meanOrNull,
   pctChangeFromCloses,
@@ -8,6 +9,32 @@ import {
 
 const rows = (closes: number[]): CloseRow[] =>
   closes.map((close, i) => ({ d: `day-${String(i).padStart(3, "0")}`, close }));
+
+describe("despike", () => {
+  const closes = (xs: number[]) => despike(rows(xs)).map((r) => r.close);
+
+  it("leaves short series (<5) untouched", () => {
+    expect(closes([100, 9999, 100])).toEqual([100, 9999, 100]);
+  });
+
+  it("removes a single revert spike", () => {
+    expect(closes([100, 101, 99, 5000, 100, 102, 98])).toEqual([100, 101, 99, 100, 102, 98]);
+  });
+
+  it("removes a multi-day spike block (the KLAC pattern)", () => {
+    const out = closes([210, 212, 208, 1900, 2100, 2150, 213, 211, 209, 214]);
+    expect(out).toEqual([210, 212, 208, 213, 211, 209, 214]);
+  });
+
+  it("keeps a legitimate sustained trend — no false drops", () => {
+    const trend = Array.from({ length: 12 }, (_, i) => 100 * 1.1 ** i);
+    expect(despike(rows(trend))).toHaveLength(12);
+  });
+
+  it("keeps a normal earnings gap under the ratio", () => {
+    expect(closes([100, 100, 100, 130, 132, 131, 133])).toEqual([100, 100, 100, 130, 132, 131, 133]);
+  });
+});
 
 describe("pctChangeFromCloses", () => {
   it("computes last vs N rows back", () => {

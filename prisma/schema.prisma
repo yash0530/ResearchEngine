@@ -95,6 +95,7 @@ model NewsItem {
   urlHash     String    @id // sha1(url)
   url         String
   title       String
+  snippet     String? // RSS description/summary — feeds richer synthesis than titles alone
   source      String?
   sectorCode  String?
   symbol      String?
@@ -152,6 +153,22 @@ model Brief {
   outputTokens Int?
 
   @@index([kind, createdAt])
+}
+
+// The persisted morning synthesis the dashboard renders as its hero. Built every
+// overnight run: `dataJson` is the deterministic DigestData (insights + provenance,
+// no LLM); `llmMd` is the optional narrative layered on top when a provider key is
+// configured. The deterministic part always exists — the digest never depends on an LLM.
+model Digest {
+  id          Int      @id @default(autoincrement())
+  d           String // YYYY-MM-DD market "as of" date the digest summarizes
+  createdAt   DateTime @default(now())
+  dataJson    String // serialized DigestData — deterministic synthesis + provenance
+  llmMd       String? // optional LLM narrative; null when analyst disabled / no key
+  llmProvider String?
+  llmModel    String?
+
+  @@index([createdAt])
 }
 
 model Position {

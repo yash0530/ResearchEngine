@@ -8,6 +8,7 @@ import { runEarnings } from "./earnings";
 import { runRulesJob } from "../rules/engine";
 import { runAnalyst } from "../analyst/runner";
 import { runMorning } from "./morning";
+import { runOvernight } from "./overnight";
 
 export type JobOptions = {
   backfillDays?: number;
@@ -17,6 +18,8 @@ export type JobOptions = {
 export type JobFn = (opts: JobOptions) => Promise<string>;
 
 export const JOBS: Record<string, JobFn> = {
+  // The ordered ETL chain run nightly by the scheduler; also runnable on demand.
+  overnight: () => runOvernight(),
   prices: (opts) => runPrices({ backfillDays: opts.backfillDays }),
   backup: () => runBackup(),
   news: () => runNews(),

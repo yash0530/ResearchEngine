@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { loadSectorDetail } from "@/lib/board";
+import { Sparkles } from "lucide-react";
+import { loadLatestDigest, loadSectorDetail } from "@/lib/board";
 import { DRIVERS } from "@/config/sectors";
 import { SectorSparkline } from "@/components/sector-sparkline";
 import { StageEditor } from "@/components/stage-editor";
-import { DriverBadge, EmptyNote, StageChip } from "@/components/ui";
+import { DriverBadge, EmptyNote, Pct, SeverityChip, StageChip } from "@/components/ui";
 import { SectorTableClient } from "@/components/sector-table-client";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +16,11 @@ export default async function SectorPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const detail = await loadSectorDetail(code);
+  const [detail, digest] = await Promise.all([loadSectorDetail(code), loadLatestDigest()]);
   if (!detail) notFound();
   const { sector, members, news, catalysts, spark } = detail;
+  const pulse = digest?.data.sectors.find((s) => s.code === code) ?? null;
+  const sectorInsights = (digest?.data.insights ?? []).filter((i) => i.sector === code);
 
   return (
     <div className="space-y-6">
@@ -37,6 +40,84 @@ export default async function SectorPage({
           <div className="muted mt-1 text-right text-[10px]">30d, equal-weight</div>
         </div>
       </div>
+
+      {pulse ? (
+        <div className="panel panel-pad">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles size={14} /> Morning pulse
+            </h2>
+            <span className="muted text-[10px]">from digest · {digest?.data.asOf ?? "—"}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <div className="muted text-[10px] uppercase tracking-wide">1d · 7d · 30d</div>
+              <div className="mt-0.5 flex gap-2 text-sm">
+                <Pct value={pulse.avg1d} decimals={1} />
+                <Pct value={pulse.avg7d} decimals={1} />
+                <Pct value={pulse.avg30d} decimals={1} />
+              </div>
+            </div>
+            <div>
+              <div className="muted text-[10px] uppercase tracking-wide">vs hyperscalers 30d</div>
+              <div className="mono mt-0.5 text-sm">
+                {pulse.vsHyperscaler30d === null ? (
+                  <span className="muted">—</span>
+                ) : (
+                  <span className={pulse.vsHyperscaler30d >= 0 ? "text-[var(--good)]" : "text-[var(--bad)]"}>
+                    {pulse.vsHyperscaler30d > 0 ? "+" : ""}
+                    {pulse.vsHyperscaler30d}pp
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="muted text-[10px] uppercase tracking-wide">worst drawdown</div>
+              <div className="mono mt-0.5 text-sm">
+                {pulse.worstDrawdown ? (
+                  <>
+                    <span className="font-semibold">{pulse.worstDrawdown.symbol}</span>{" "}
+                    <Pct value={pulse.worstDrawdown.dd} decimals={1} />
+                  </>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="muted text-[10px] uppercase tracking-wide">leader · laggard 30d</div>
+              <div className="mono mt-0.5 text-xs">
+                {pulse.leader ? (
+                  <span className="font-semibold">{pulse.leader.symbol}</span>
+                ) : (
+                  "—"
+                )}{" "}
+                <Pct value={pulse.leader?.pct30d ?? null} decimals={0} />
+                {" · "}
+                {pulse.laggard ? (
+                  <span className="font-semibold">{pulse.laggard.symbol}</span>
+                ) : (
+                  "—"
+                )}{" "}
+                <Pct value={pulse.laggard?.pct30d ?? null} decimals={0} />
+              </div>
+            </div>
+          </div>
+          {sectorInsights.length > 0 ? (
+            <ul className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
+              {sectorInsights.map((i, idx) => (
+                <li key={idx} className="flex items-start gap-2 text-sm">
+                  <SeverityChip severity={i.severity} />
+                  <div className="min-w-0">
+                    <div className="leading-snug">{i.headline}</div>
+                    <div className="muted mono text-[10px]">{i.evidence}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="panel panel-pad">
         <h2 className="mb-3 text-sm font-semibold">Re-rate stage</h2>

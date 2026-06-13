@@ -9,6 +9,8 @@ import { pctChange } from "../lib/metrics";
 import { buildSnapshot } from "../lib/analyst/snapshot";
 import { SnapshotSchema } from "../lib/analyst/schemas";
 import { runAllRules } from "../lib/rules/engine";
+import { buildDigestData } from "../lib/research/synthesize";
+import { settings } from "../config/settings";
 
 const prisma = new PrismaClient();
 let failures = 0;
@@ -73,9 +75,25 @@ async function main() {
     check("rules dry-run does not throw", false, String(error));
   }
 
-  // ── Optional provider ping (only if a key is configured) ───────────────────
-  if (process.env.ANTHROPIC_API_KEY) {
-    console.log("· ANTHROPIC_API_KEY present — run `npm run job -- nightly` to verify live calls.");
+  // ── Digest synthesis (deterministic — the morning hero, needs no LLM) ───────
+  try {
+    const digest = await buildDigestData();
+    check("digest builds with 12 sectors", digest.sectors.length === 12, `found ${digest.sectors.length}`);
+    check("digest produces a headline", digest.headline.length > 0);
+    check(
+      "every insight carries evidence (provenance)",
+      digest.insights.every((i) => i.evidence.length > 0),
+      `${digest.insights.length} insights`,
+    );
+  } catch (error) {
+    check("buildDigestData does not throw", false, String(error));
+  }
+
+  // ── Optional provider ping (only if the analyst is enabled) ─────────────────
+  if (settings.analyst.enabled) {
+    console.log(
+      `· analyst enabled (${settings.analyst.nightly}) — run \`npm run job -- nightly\` or \`morning\` to verify live LLM calls.`,
+    );
   }
 
   await prisma.$disconnect();

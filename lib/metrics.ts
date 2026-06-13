@@ -38,6 +38,29 @@ export function meanOrNull(values: (number | null)[]): number | null {
   return round2(usable.reduce((a, b) => a + b, 0) / usable.length);
 }
 
+/**
+ * Drop bad price ticks / unadjusted split points before deriving metrics: any close that
+ * sits ≥`ratio`× away from the median of its local window. Uses a median (not neighbors) so
+ * it survives multi-day spike *blocks* (e.g. a close stuck at 10× for three days then snapping
+ * back). Conservative: ratio 2.5 ≈ a 150%+ move that reverts — a tick, never a real close for
+ * a liquid name, so legitimate trends and earnings gaps are kept. Pure + non-destructive;
+ * input must be ascending by date. This cleans COMPUTED metrics without mutating the price DB.
+ */
+export function despike(rows: CloseRow[], window = 10, ratio = 2.5): CloseRow[] {
+  if (rows.length < 5) return rows;
+  return rows.filter((row, i) => {
+    const lo = Math.max(0, i - window);
+    const hi = Math.min(rows.length, i + window + 1);
+    const neighbors: number[] = [];
+    for (let j = lo; j < hi; j++) if (j !== i) neighbors.push(rows[j].close);
+    neighbors.sort((a, b) => a - b);
+    const med = neighbors[Math.floor(neighbors.length / 2)];
+    if (!med || med <= 0 || row.close <= 0) return true;
+    const r = row.close / med;
+    return r < ratio && r > 1 / ratio;
+  });
+}
+
 // ── Prisma-bound wrappers ────────────────────────────────────────────────────
 
 /** Last `limit` closes for a symbol, ascending by date. */

@@ -5,7 +5,6 @@ import { z } from "zod";
 import { Stage, TickerClass } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { MANUAL_SERIES, STAGES } from "@/config/sectors";
-import { sendNtfy } from "@/lib/notify";
 import { runJob } from "@/lib/jobs/runner";
 import { runAnalyst } from "@/lib/analyst/runner";
 import { fetchEarningsDates, fetchDailyBars, fetchTickerStats } from "@/lib/yahoo";
@@ -81,13 +80,13 @@ export async function applyRerateAction(
 
 export async function ackAlertAction(id: number) {
   await prisma.ruleEvent.update({ where: { id: z.number().int().parse(id) }, data: { acked: true } });
-  revalidatePath("/alerts");
+  revalidatePath("/signals");
   revalidatePath("/");
 }
 
 export async function ackAllAlertsAction() {
   await prisma.ruleEvent.updateMany({ where: { acked: false }, data: { acked: true } });
-  revalidatePath("/alerts");
+  revalidatePath("/signals");
   revalidatePath("/");
 }
 
@@ -326,14 +325,6 @@ export async function deleteSymbolOverrideAction(symbol: string) {
 
 // ── Ops ──────────────────────────────────────────────────────────────────────
 
-export async function testNtfyAction(): Promise<boolean> {
-  return sendNtfy({
-    severity: "info",
-    title: "engine",
-    message: "Test push from the Ops page — pipes are connected.",
-  });
-}
-
 export async function runEventModeAction(event: string): Promise<{ ok: boolean; detail: string }> {
   const text = z.string().trim().min(5).max(500).parse(event);
   const result = await runJob("event", () => runAnalyst("event_mode", { event: text }));
@@ -372,7 +363,7 @@ export async function resetDatabaseAction(): Promise<{ ok: boolean; detail: stri
     revalidatePath("/journal");
     revalidatePath("/rerate");
     revalidatePath("/ops");
-    revalidatePath("/alerts");
+    revalidatePath("/signals");
     revalidatePath("/series");
 
     return { ok: true, detail: "Database wiped and successfully reseeded." };

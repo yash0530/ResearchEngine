@@ -1,5 +1,6 @@
-// Tripwire rule definitions. Severity drives ntfy priority; cooloff suppresses
-// re-fires. Edit freely — `npm run job -- rules --dry-run` shows what would fire.
+// Tripwire rule definitions. Severity ranks how prominently a fire is surfaced in
+// the morning digest and the Signals view; cooloff suppresses re-fires. Edit freely
+// — `npm run job -- rules --dry-run` shows what would fire.
 
 import type { TripwireRule } from "../lib/rules/types";
 

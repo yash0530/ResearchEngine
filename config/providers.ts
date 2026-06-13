@@ -53,9 +53,25 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
   gemini_compat: {
     protocol: "openai_compat",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash", // bare id — no "models/" prefix on the compat endpoint
+    // Verified available on the live key (2026-06): flash-lite is the cheap daily driver.
+    // Upgrade path once quota allows: swap to "gemini-3.5-flash" (one-line change) for
+    // materially better synthesis — the protocol/profile shape is identical.
+    model: "gemini-3.1-flash-lite", // bare id — no "models/" prefix on the compat endpoint
     apiKeyEnv: "GEMINI_API_KEY",
-    maxTokens: 1500,
+    maxTokens: 4096, // headroom for the 12-sector monthly re-rate + richer nightly synthesis
+    jsonMode: true, // Gemini honors response_format json_object; jsonsafe still backstops
+  },
+  // Pre-staged stronger sibling for the monthly stage re-rate. The model exists, but the
+  // free-tier key may lack 3.5-flash quota — leave the `monthly` role on gemini_compat until
+  // quota lands, then point it here (config/settings.ts). One-line switch; until then this
+  // profile is simply unused and nothing 404s.
+  gemini_strong: {
+    protocol: "openai_compat",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-3.5-flash",
+    apiKeyEnv: "GEMINI_API_KEY",
+    maxTokens: 4096,
+    jsonMode: true,
   },
   ollama_local: {
     protocol: "openai_compat",

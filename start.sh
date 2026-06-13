@@ -46,7 +46,7 @@ if [ ! -f .env ]; then
   print_warning ".env file not found. Copying from .env.example..."
   cp .env.example .env
   print_success "Created .env file."
-  print_warning "Please configure your LLM provider keys and ntfy credentials in .env when ready."
+  print_warning "Add an LLM provider key to .env when ready — optional; the deterministic digest runs without one."
 else
   print_success ".env file exists."
 fi
@@ -78,7 +78,7 @@ run_job_interactive() {
     echo -e "3) ${BOLD}earnings${NC} - Fetch upcoming earnings (slow, ~1/sec)"
     echo -e "4) ${BOLD}rules${NC}    - Evaluate tripwires"
     echo -e "5) ${BOLD}nightly${NC}  - Run nightly brief (requires LLM API key in .env)"
-    echo -e "6) ${BOLD}morning${NC}  - Morning ntfy push notification"
+    echo -e "6) ${BOLD}morning${NC}  - Build the morning digest (deterministic + optional LLM)"
     echo -e "7) ${BOLD}backup${NC}   - Back up the SQLite database"
     echo -e "8) ${BOLD}Go back to main menu${NC}"
     
