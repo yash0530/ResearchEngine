@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TickerClass {
+  stock
+  etf
+  benchmark
+}
+
+enum Stage {
+  early
+  inflecting
+  popping
+  crowded
+  reset
+}
+
+enum Severity {
+  info
+  warn
+  critical
+}
+
+model Sector {
+  code         String         @id // "00".."11"
+  name         String
+  driver       Int // 1..5, see DRIVERS in config/sectors.ts
+  stage        Stage          @default(early)
+  note         String?
+  tickerLinks  TickerSector[]
+  stageHistory StageHistory[]
+}
+
+model StageHistory {
+  id         Int      @id @default(autoincrement())
+  sectorCode String
+  sector     Sector   @relation(fields: [sectorCode], references: [code], onDelete: Cascade)
+  stage      Stage
+  ratedBy    String // 'seed' | 'human' | 'analyst:{model}'
+  rationale  String?
+  ratedAt    DateTime @default(now())
+
+  @@index([sectorCode, ratedAt])
+}
+
+model Ticker {
+  symbol      String         @id
+  class       TickerClass    @default(stock)
+  active      Boolean        @default(true)
+  name        String?
+  sectorLinks TickerSector[]
+}
+
+model TickerSector {
+  symbol     String
+  sectorCode String
+  ticker     Ticker @relation(fields: [symbol], references: [symbol], onDelete: Cascade)
+  sector     Sector @relation(fields: [sectorCode], references: [code], onDelete: Cascade)
+
+  @@id([symbol, sectorCode])
+  @@index([sectorCode])
+}
+
+model Price {
+  symbol String
+  d      String // YYYY-MM-DD exchange-local date
+  close  Float
+  volume Float?
+
+  @@id([symbol, d])
+  @@index([d])
+}
+
+model NewsItem {
+  urlHash     String    @id // sha1(url)
+  url         String
+  title       String
+  source      String?
+  sectorCode  String?
+  symbol      String?
+  publishedAt DateTime?
+  fetchedAt   DateTime  @default(now())
+
+  @@index([sectorCode, fetchedAt])
+  @@index([fetchedAt])
+}
+
+model Catalyst {
+  id         Int     @id @default(autoincrement())
+  d          String? // YYYY-MM-DD, null = undated watch item
+  kind       String // earnings | deadline | ipo | product | macro
+  sectorCode String?
+  symbol     String?
+  title      String
+  note       String?
+
+  @@unique([d, kind, symbol, title])
+  @@index([d])
+}
+
+model ManualSeries {
+  series String // ddr5_contract_mom | nand_contract_mom | gpu_rental_dir | capex_flag
+  d      String // YYYY-MM-DD (or YYYY-MM-01 for monthly readings)
+  value  Float
+  note   String?
+
+  @@id([series, d])
+}
+
+model RuleEvent {
+  id       Int      @id @default(autoincrement())
+  ruleId   String
+  firedAt  DateTime @default(now())
+  severity Severity
+  message  String
+  acked    Boolean  @default(false)
+
+  @@index([ruleId, firedAt])
+  @@index([acked, firedAt])
+}
+
+model Brief {
+  id           Int      @id @default(autoincrement())
+  kind         String // nightly | monthly_rerate | event_mode
+  provider     String
+  model        String
+  createdAt    DateTime @default(now())
+  inputJson    String // EXACT request payload sent — the audit trail is a feature
+  outputJson   String
+  ok           Boolean  @default(true)
+  inputTokens  Int?
+  outputTokens Int?
+
+  @@index([kind, createdAt])
+}
+
+model Position {
+  symbol   String  @id
+  qty      Float
+  avgCost  Float
+  openedAt String? // YYYY-MM-DD
+}
+
+model JournalEntry {
+  id           Int      @id @default(autoincrement())
+  symbol       String
+  action       String // buy | sell | trim | add | note
+  thesis       String
+  invalidation String?
+  createdAt    DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}
+
+model JobRun {
+  id        Int      @id @default(autoincrement())
+  job       String
+  startedAt DateTime @default(now())
+  ok        Boolean
+  detail    String?
+
+  @@index([job, startedAt])
+}
+
+model SymbolOverride {
+  symbol   String @id
+  yfSymbol String
+}
