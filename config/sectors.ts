@@ -48,7 +48,8 @@ export const SECTOR_SEEDS: SectorSeed[] = [
     color: "#2563eb",
     note: "GPU/accelerator/custom-ASIC silicon plus the EDA/IP toolchain that designs it.",
     newsQuery: 'Nvidia OR Broadcom ASIC OR "AI chip"',
-    tickers: ["NVDA", "AMD", "AVGO", "MRVL", "INTC", "ARM", "SNPS", "CDNS", "ANSS"],
+    // ANSS excluded: acquired by Synopsys and delisted — SNPS/CDNS carry the EDA exposure.
+    tickers: ["NVDA", "AMD", "AVGO", "MRVL", "INTC", "ARM", "SNPS", "CDNS"],
   },
   {
     code: "02",
