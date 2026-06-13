@@ -15,31 +15,35 @@ export type DigestSummary = {
   llmModel: string | null;
 };
 
+/** PURE: derive the archive-row summary from a stored dataJson string. Malformed JSON →
+ *  safe fallback so one bad row never breaks the list. */
+export function summarizeDigestRow(dataJson: string): {
+  headline: string;
+  insightsTotal: number;
+  criticals: number;
+} {
+  try {
+    const data = JSON.parse(dataJson) as DigestData;
+    return {
+      headline: data.headline ?? "",
+      insightsTotal: data.counts?.insightsTotal ?? data.insights?.length ?? 0,
+      criticals: data.counts?.criticals ?? 0,
+    };
+  } catch {
+    return { headline: "(unreadable digest)", insightsTotal: 0, criticals: 0 };
+  }
+}
+
 export async function loadDigestList(limit = 60): Promise<DigestSummary[]> {
   const rows = await prisma.digest.findMany({ orderBy: { createdAt: "desc" }, take: limit });
-  return rows.map((row) => {
-    let headline = "";
-    let insightsTotal = 0;
-    let criticals = 0;
-    try {
-      const data = JSON.parse(row.dataJson) as DigestData;
-      headline = data.headline ?? "";
-      insightsTotal = data.counts?.insightsTotal ?? data.insights?.length ?? 0;
-      criticals = data.counts?.criticals ?? 0;
-    } catch {
-      headline = "(unreadable digest)";
-    }
-    return {
-      id: row.id,
-      d: row.d,
-      createdAt: row.createdAt,
-      headline,
-      insightsTotal,
-      criticals,
-      llmProvider: row.llmProvider,
-      llmModel: row.llmModel,
-    };
-  });
+  return rows.map((row) => ({
+    id: row.id,
+    d: row.d,
+    createdAt: row.createdAt,
+    ...summarizeDigestRow(row.dataJson),
+    llmProvider: row.llmProvider,
+    llmModel: row.llmModel,
+  }));
 }
 
 export type DigestDetail = {
