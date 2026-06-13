@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { ArrowUpRight, CalendarDays, Sparkles } from "lucide-react";
 import { loadBoardPage, loadLatestDigest } from "@/lib/board";
 import { loadPositionContext } from "@/lib/research/positions";
+import { loadDriverRollup } from "@/lib/research/drivers";
 import type { DigestData } from "@/lib/research/synthesize";
 import { STAGES } from "@/config/sectors";
 import { SectorSparkline } from "@/components/sector-sparkline";
@@ -55,7 +56,12 @@ function InsightList({ insights }: { insights: DigestData["insights"] }) {
 }
 
 export default async function MorningPage() {
-  const [digest, board, posCtx] = await Promise.all([loadLatestDigest(), loadBoardPage(), loadPositionContext()]);
+  const [digest, board, posCtx, drivers] = await Promise.all([
+    loadLatestDigest(),
+    loadBoardPage(),
+    loadPositionContext(),
+    loadDriverRollup(),
+  ]);
   const d = digest?.data ?? null;
   const stale = (d?.ageDays ?? board.ageDays ?? 0) > 3;
 
@@ -139,6 +145,54 @@ export default async function MorningPage() {
               </div>
             </div>
           </div>
+
+          {/* By driver — Driver-1 spans 8/12 sectors, so the driver aggregate is high-signal */}
+          {drivers && drivers.length > 0 && (
+            <div className="panel panel-pad">
+              <h2 className="mb-3 text-sm font-semibold">By driver</h2>
+              <div className="space-y-2">
+                {drivers.map((dr) => (
+                  <div
+                    key={dr.driver}
+                    className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2 text-sm last:border-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <span className="mono text-[10px] text-[var(--muted)]">D{dr.driver}</span>{" "}
+                      <span className="font-medium">{dr.label}</span>{" "}
+                      <span className="muted text-xs">· {dr.sectorCount} sectors</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-4 text-xs">
+                      <span>
+                        <span className="muted">30d </span>
+                        <Pct value={dr.avg30d} decimals={1} />
+                      </span>
+                      <span className="muted">
+                        vs hyp{" "}
+                        {dr.vsHyperscaler30d === null ? (
+                          "—"
+                        ) : (
+                          <span className={dr.vsHyperscaler30d >= 0 ? "text-[var(--good)]" : "text-[var(--bad)]"}>
+                            {dr.vsHyperscaler30d > 0 ? "+" : ""}
+                            {dr.vsHyperscaler30d}pp
+                          </span>
+                        )}
+                      </span>
+                      {dr.signalCount > 0 ? (
+                        <span
+                          className="badge"
+                          style={{ color: "var(--bad)", borderColor: "var(--bad)" } as CSSProperties}
+                        >
+                          {dr.signalCount} signal{dr.signalCount > 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span className="muted">clear</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* The signal surface */}
           <div>
