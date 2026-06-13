@@ -58,3 +58,14 @@ export async function loadDriverRollup(): Promise<DriverRollup[] | null> {
   if (!digest) return null;
   return rollupByDriver(digest.data.sectors, digest.data.insights);
 }
+
+export type DriverDetail = { rollup: DriverRollup; sectors: DigestData["sectors"] };
+
+export async function loadDriverDetail(driver: number): Promise<DriverDetail | null> {
+  const digest = await loadLatestDigest();
+  if (!digest) return null;
+  const sectors = digest.data.sectors.filter((s) => s.driver === driver);
+  if (sectors.length === 0) return null;
+  const rollup = rollupByDriver(sectors, digest.data.insights)[0];
+  return { rollup, sectors };
+}

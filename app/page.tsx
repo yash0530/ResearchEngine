@@ -152,9 +152,10 @@ export default async function MorningPage() {
               <h2 className="mb-3 text-sm font-semibold">By driver</h2>
               <div className="space-y-2">
                 {drivers.map((dr) => (
-                  <div
+                  <Link
                     key={dr.driver}
-                    className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2 text-sm last:border-0 last:pb-0"
+                    href={`/drivers/${dr.driver}`}
+                    className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2 text-sm transition last:border-0 last:pb-0 hover:text-[var(--text)]"
                   >
                     <div className="min-w-0">
                       <span className="mono text-[10px] text-[var(--muted)]">D{dr.driver}</span>{" "}
@@ -188,7 +189,7 @@ export default async function MorningPage() {
                         <span className="muted">clear</span>
                       )}
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
