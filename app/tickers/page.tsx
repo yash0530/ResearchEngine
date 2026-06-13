@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { loadTickersList } from "@/lib/board";
+import { SECTOR_SEEDS } from "@/config/sectors";
 import { EmptyNote, Pct } from "@/components/ui";
+import { TickerAdminClient } from "@/components/ticker-admin-client";
 import { fmtMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,11 @@ export default async function TickersPage() {
             sector so they never skew sector averages.
           </p>
         </div>
+      </div>
+
+      <div className="panel panel-pad">
+        <h2 className="mb-3 text-sm font-semibold">Add to universe</h2>
+        <TickerAdminClient sectorCodes={SECTOR_SEEDS.map((s) => s.code)} />
       </div>
 
       {tickers.length === 0 ? (
