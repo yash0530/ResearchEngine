@@ -4,8 +4,8 @@ import { loadSectorDetail } from "@/lib/board";
 import { DRIVERS } from "@/config/sectors";
 import { SectorSparkline } from "@/components/sector-sparkline";
 import { StageEditor } from "@/components/stage-editor";
-import { DriverBadge, EmptyNote, Pct, StageChip } from "@/components/ui";
-import { fmtMoney } from "@/lib/format";
+import { DriverBadge, EmptyNote, StageChip } from "@/components/ui";
+import { SectorTableClient } from "@/components/sector-table-client";
 
 export const dynamic = "force-dynamic";
 
@@ -43,40 +43,7 @@ export default async function SectorPage({
         <StageEditor code={sector.code} current={sector.stage} />
       </div>
 
-      <div className="panel">
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Name</th>
-                <th>Close</th>
-                <th>1d</th>
-                <th>7d</th>
-                <th>30d</th>
-                <th>Off 60d high</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => (
-                <tr key={m.symbol}>
-                  <td>
-                    <Link href={`/tickers/${m.symbol}`} className="mono font-semibold hover:underline">
-                      {m.symbol}
-                    </Link>
-                  </td>
-                  <td className="muted max-w-56 truncate">{m.name ?? "—"}</td>
-                  <td className="mono">{fmtMoney(m.lastClose)}</td>
-                  <td><Pct value={m.pct1d} decimals={1} /></td>
-                  <td><Pct value={m.pct7d} decimals={1} /></td>
-                  <td><Pct value={m.pct30d} decimals={1} /></td>
-                  <td><Pct value={m.drawdown60} decimals={1} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectorTableClient members={members} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="panel panel-pad lg:col-span-2">

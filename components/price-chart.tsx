@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -24,6 +23,23 @@ const tooltipStyle = {
 
 export function PriceChart({ data }: { data: { d: string; close: number }[] }) {
   const [range, setRange] = useState<RangeKey>("3M");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    setWidth(containerRef.current.clientWidth);
+
+    const observer = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        setWidth(entries[0].contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const rows = useMemo(() => data.slice(-RANGES[range]), [data, range]);
   const positive = rows.length > 1 && rows[rows.length - 1].close >= rows[0].close;
 
@@ -45,9 +61,9 @@ export function PriceChart({ data }: { data: { d: string; close: number }[] }) {
           </button>
         ))}
       </div>
-      <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+      <div ref={containerRef} className="h-72 w-full">
+        {width > 0 ? (
+          <LineChart width={width} height={288} data={rows} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
             <XAxis
               dataKey="d"
@@ -74,7 +90,9 @@ export function PriceChart({ data }: { data: { d: string; close: number }[] }) {
               isAnimationActive={false}
             />
           </LineChart>
-        </ResponsiveContainer>
+        ) : (
+          <div className="h-full w-full" />
+        )}
       </div>
     </div>
   );
