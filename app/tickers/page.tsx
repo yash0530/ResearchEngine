@@ -1,14 +1,19 @@
-import Link from "next/link";
-import { loadTickersList } from "@/lib/board";
+import { prisma } from "@/lib/prisma";
+import { loadTickersList, loadTickersTechnicals } from "@/lib/board";
 import { SECTOR_SEEDS } from "@/config/sectors";
-import { EmptyNote, Pct } from "@/components/ui";
+import { EmptyNote } from "@/components/ui";
 import { TickerAdminClient } from "@/components/ticker-admin-client";
-import { fmtMoney } from "@/lib/format";
+import { TickersTabsClient } from "@/components/tickers-tabs-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function TickersPage() {
-  const tickers = await loadTickersList();
+  const [tickers, technicals, overrides] = await Promise.all([
+    loadTickersList(),
+    loadTickersTechnicals(),
+    prisma.symbolOverride.findMany({ orderBy: { symbol: "asc" } }),
+  ]);
+
   const active = tickers.filter((t) => t.active);
   const inactive = tickers.filter((t) => !t.active);
 
@@ -26,66 +31,22 @@ export default async function TickersPage() {
       </div>
 
       <div className="panel panel-pad">
-        <h2 className="mb-3 text-sm font-semibold">Add to universe</h2>
-        <TickerAdminClient sectorCodes={SECTOR_SEEDS.map((s) => s.code)} />
+        <h2 className="mb-3 text-sm font-semibold">Manage universe</h2>
+        <TickerAdminClient 
+          sectorCodes={SECTOR_SEEDS.map((s) => s.code)} 
+          overrides={overrides}
+        />
       </div>
 
       {tickers.length === 0 ? (
         <EmptyNote>Universe is empty — run the seed.</EmptyNote>
       ) : (
-        <div className="panel">
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Name</th>
-                  <th>Class</th>
-                  <th>Sectors</th>
-                  <th>Close</th>
-                  <th>1d</th>
-                  <th>30d</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...active, ...inactive].map((t) => (
-                  <tr key={t.symbol} className={t.active ? "" : "opacity-50"}>
-                    <td>
-                      <Link
-                        href={`/tickers/${t.symbol}`}
-                        className="mono font-semibold hover:underline"
-                      >
-                        {t.symbol}
-                      </Link>
-                    </td>
-                    <td className="muted max-w-64 truncate">{t.name ?? "—"}</td>
-                    <td>
-                      <span className="badge">{t.class}</span>
-                    </td>
-                    <td className="mono text-xs">
-                      {t.sectors.length ? (
-                        t.sectors.map((code) => (
-                          <Link
-                            key={code}
-                            href={`/sectors/${code}`}
-                            className="mr-1 hover:underline"
-                          >
-                            {code}
-                          </Link>
-                        ))
-                      ) : (
-                        <span className="muted">benchmark</span>
-                      )}
-                    </td>
-                    <td className="mono">{fmtMoney(t.lastClose)}</td>
-                    <td><Pct value={t.pct1d} decimals={1} /></td>
-                    <td><Pct value={t.pct30d} decimals={1} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <TickersTabsClient
+          tickers={tickers}
+          technicals={technicals}
+          overrides={overrides}
+          sectors={SECTOR_SEEDS.map((s) => ({ code: s.code, name: s.name }))}
+        />
       )}
     </div>
   );
