@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Activity,
+  Archive,
   Bell,
   BookOpen,
   Calendar,
@@ -29,6 +30,7 @@ const NAV_GROUPS: { heading?: string; items: NavItem[] }[] = [
   {
     heading: "Research",
     items: [
+      { href: "/digests", label: "Digests", icon: Archive },
       { href: "/briefs", label: "Briefs", icon: FileText },
       { href: "/news", label: "News", icon: Newspaper },
       { href: "/calendar", label: "Calendar", icon: Calendar },
