@@ -39,6 +39,64 @@ export async function fetchDailyBars(
   }
 }
 
+export type TickerStats = {
+  marketCap: number | null;
+  forwardPE: number | null;
+  trailingPE: number | null;
+  profitMargin: number | null;
+  revenueGrowth: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  beta: number | null;
+  eps: number | null;
+  dividendYield: number | null;
+  yearChange: number | null;
+};
+
+/** Fetch key fundamental statistics from Yahoo Finance quoteSummary. Returns null on failure. */
+export async function fetchTickerStats(symbol: string): Promise<TickerStats | null> {
+  try {
+    const summary = await yahooFinance.quoteSummary(symbol, {
+      modules: ["defaultKeyStatistics", "financialData", "summaryDetail"],
+    });
+
+    const stats = (summary.defaultKeyStatistics || {}) as any;
+    const financials = (summary.financialData || {}) as any;
+    const detail = (summary.summaryDetail || {}) as any;
+
+    return {
+      marketCap: detail.marketCap != null && Number.isFinite(detail.marketCap) ? detail.marketCap : null,
+      forwardPE: detail.forwardPE != null && Number.isFinite(detail.forwardPE) ? detail.forwardPE :
+                 stats.forwardPE != null && Number.isFinite(stats.forwardPE) ? stats.forwardPE : null,
+      trailingPE: detail.trailingPE != null && Number.isFinite(detail.trailingPE) ? detail.trailingPE :
+                  stats.trailingPE != null && Number.isFinite(stats.trailingPE) ? stats.trailingPE : null,
+      profitMargin: financials.profitMargins != null && Number.isFinite(financials.profitMargins) ? financials.profitMargins :
+                    stats.profitMargins != null && Number.isFinite(stats.profitMargins) ? stats.profitMargins : null,
+      revenueGrowth: financials.revenueGrowth != null && Number.isFinite(financials.revenueGrowth) ? financials.revenueGrowth : null,
+      fiftyTwoWeekHigh: detail.fiftyTwoWeekHigh != null && Number.isFinite(detail.fiftyTwoWeekHigh) ? detail.fiftyTwoWeekHigh : null,
+      fiftyTwoWeekLow: detail.fiftyTwoWeekLow != null && Number.isFinite(detail.fiftyTwoWeekLow) ? detail.fiftyTwoWeekLow : null,
+      beta: detail.beta != null && Number.isFinite(detail.beta) ? detail.beta :
+            stats.beta != null && Number.isFinite(stats.beta) ? stats.beta : null,
+      eps: stats.trailingEps != null && Number.isFinite(stats.trailingEps) ? stats.trailingEps : null,
+      dividendYield: detail.dividendYield != null && Number.isFinite(detail.dividendYield) ? detail.dividendYield : null,
+      yearChange: stats["52WeekChange"] != null && Number.isFinite(stats["52WeekChange"]) ? stats["52WeekChange"] : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch raw defaultKeyStatistics, financialData, and summaryDetail modules from Yahoo Finance quoteSummary. */
+export async function fetchLiveTickerStats(symbol: string): Promise<any | null> {
+  try {
+    return await yahooFinance.quoteSummary(symbol, {
+      modules: ["defaultKeyStatistics", "financialData", "summaryDetail"],
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** Upcoming earnings dates (YYYY-MM-DD). Empty on any failure — many symbols have none. */
 export async function fetchEarningsDates(symbol: string): Promise<string[]> {
   try {

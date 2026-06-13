@@ -10,6 +10,15 @@ import {
   type CloseRow,
 } from "./metrics";
 import { addDaysStr, daysBetween, todayStr } from "./dates";
+import { fetchLiveTickerStats } from "./yahoo";
+import {
+  calculateSMA,
+  calculateRSI,
+  calculateBollinger,
+  calculateMACD,
+  calculateVolatility,
+  calculateGoldenCross,
+} from "./technicals";
 
 export type SymbolMetrics = {
   symbol: string;
@@ -20,6 +29,18 @@ export type SymbolMetrics = {
   pct7d: number | null;
   pct30d: number | null;
   drawdown60: number | null;
+  // Fundamental metrics
+  marketCap: number | null;
+  forwardPE: number | null;
+  trailingPE: number | null;
+  profitMargin: number | null;
+  revenueGrowth: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  beta: number | null;
+  eps: number | null;
+  dividendYield: number | null;
+  yearChange: number | null;
 };
 
 async function bulkCloses(sinceDays: number): Promise<{
@@ -49,6 +70,19 @@ function symbolMetrics(
   symbol: string,
   name: string | null,
   closes: CloseRow[] | undefined,
+  ticker?: {
+    marketCap?: number | null;
+    forwardPE?: number | null;
+    trailingPE?: number | null;
+    profitMargin?: number | null;
+    revenueGrowth?: number | null;
+    fiftyTwoWeekHigh?: number | null;
+    fiftyTwoWeekLow?: number | null;
+    beta?: number | null;
+    eps?: number | null;
+    dividendYield?: number | null;
+    yearChange?: number | null;
+  } | null,
 ): SymbolMetrics {
   const rows = closes ?? [];
   const last = rows.length ? rows[rows.length - 1] : null;
@@ -61,6 +95,17 @@ function symbolMetrics(
     pct7d: pctChangeFromCloses(rows, 7),
     pct30d: pctChangeFromCloses(rows, 30),
     drawdown60: drawdownFromCloses(rows, 60),
+    marketCap: ticker?.marketCap ?? null,
+    forwardPE: ticker?.forwardPE ?? null,
+    trailingPE: ticker?.trailingPE ?? null,
+    profitMargin: ticker?.profitMargin ?? null,
+    revenueGrowth: ticker?.revenueGrowth ?? null,
+    fiftyTwoWeekHigh: ticker?.fiftyTwoWeekHigh ?? null,
+    fiftyTwoWeekLow: ticker?.fiftyTwoWeekLow ?? null,
+    beta: ticker?.beta ?? null,
+    eps: ticker?.eps ?? null,
+    dividendYield: ticker?.dividendYield ?? null,
+    yearChange: ticker?.yearChange ?? null,
   };
 }
 
@@ -236,7 +281,7 @@ export async function loadSectorDetail(code: string) {
   ]);
 
   const rows = members
-    .map((m) => symbolMetrics(m.symbol, m.name, bySymbol.get(m.symbol)))
+    .map((m) => symbolMetrics(m.symbol, m.name, bySymbol.get(m.symbol), m))
     .sort((a, b) => (b.pct1d ?? -999) - (a.pct1d ?? -999));
 
   return {
@@ -251,13 +296,20 @@ export async function loadSectorDetail(code: string) {
 // ── Ticker detail ────────────────────────────────────────────────────────────
 
 export async function loadTickerDetail(symbol: string) {
-  const ticker = await prisma.ticker.findUnique({
-    where: { symbol },
-    include: { sectorLinks: { include: { sector: true } } },
-  });
+  const [ticker, override] = await Promise.all([
+    prisma.ticker.findUnique({
+      where: { symbol },
+      include: { sectorLinks: { include: { sector: true } } },
+    }),
+    prisma.symbolOverride.findUnique({
+      where: { symbol },
+    }),
+  ]);
   if (!ticker) return null;
 
-  const [prices, position, journal, catalysts] = await Promise.all([
+  const yfSymbol = override?.yfSymbol ?? symbol;
+
+  const [prices, position, journal, catalysts, liveStats] = await Promise.all([
     prisma.price.findMany({
       where: { symbol },
       orderBy: { d: "desc" },
@@ -274,6 +326,7 @@ export async function loadTickerDetail(symbol: string) {
       orderBy: { d: "asc" },
       take: 6,
     }),
+    fetchLiveTickerStats(yfSymbol),
   ]);
 
   const closes: CloseRow[] = prices
@@ -295,11 +348,12 @@ export async function loadTickerDetail(symbol: string) {
     ticker,
     closes,
     lastVolume: last?.volume ?? null,
-    metrics: symbolMetrics(ticker.symbol, ticker.name, closes),
+    metrics: symbolMetrics(ticker.symbol, ticker.name, closes, ticker),
     position,
     journal,
     catalysts,
     news,
+    liveStats,
   };
 }
 
@@ -325,5 +379,86 @@ export async function loadTickersList() {
       const rows = bySymbol.get(t.symbol);
       return rows?.length ? round2(rows[rows.length - 1].close) : null;
     })(),
+    marketCap: t.marketCap,
+    forwardPE: t.forwardPE,
+    trailingPE: t.trailingPE,
+    profitMargin: t.profitMargin,
+    revenueGrowth: t.revenueGrowth,
+    fiftyTwoWeekHigh: t.fiftyTwoWeekHigh,
+    fiftyTwoWeekLow: t.fiftyTwoWeekLow,
+    beta: t.beta,
+    eps: t.eps,
+    dividendYield: t.dividendYield,
+    yearChange: t.yearChange,
   }));
+}
+
+export type TickerTechnicals = {
+  symbol: string;
+  name: string | null;
+  class: string;
+  active: boolean;
+  sectors: string[];
+  lastClose: number | null;
+  rsi: number | null;
+  macd: { macd: number; signal: number; histogram: number; signalLabel: string } | null;
+  bollinger: { upper: number; middle: number; lower: number; position: number } | null;
+  volatility: number | null;
+  isGoldenCross: boolean | null;
+  sma50: number | null;
+  sma200: number | null;
+};
+
+export async function loadTickersTechnicals(): Promise<TickerTechnicals[]> {
+  const tickers = await prisma.ticker.findMany({
+    where: { active: true },
+    include: { sectorLinks: true },
+    orderBy: { symbol: "asc" },
+  });
+
+  const prices = await prisma.price.findMany({
+    where: { symbol: { in: tickers.map((t) => t.symbol) } },
+    orderBy: { d: "asc" },
+    select: { symbol: true, d: true, close: true },
+  });
+
+  const bySymbol = new Map<string, number[]>();
+  for (const price of prices) {
+    let list = bySymbol.get(price.symbol);
+    if (!list) {
+      list = [];
+      bySymbol.set(price.symbol, list);
+    }
+    list.push(price.close);
+  }
+
+  return tickers.map((t) => {
+    const closes = bySymbol.get(t.symbol) ?? [];
+    const recentCloses = closes.slice(-260);
+
+    const lastClose = recentCloses.length > 0 ? recentCloses[recentCloses.length - 1] : null;
+    const rsi = calculateRSI(recentCloses);
+    const macd = calculateMACD(recentCloses);
+    const bollinger = calculateBollinger(recentCloses);
+    const volatility = calculateVolatility(recentCloses);
+    const isGoldenCross = calculateGoldenCross(recentCloses);
+    const sma50 = calculateSMA(recentCloses, 50);
+    const sma200 = calculateSMA(recentCloses, 200);
+
+    return {
+      symbol: t.symbol,
+      name: t.name,
+      class: t.class,
+      active: t.active,
+      sectors: t.sectorLinks.map((l) => l.sectorCode).sort(),
+      lastClose,
+      rsi,
+      macd,
+      bollinger,
+      volatility,
+      isGoldenCross,
+      sma50,
+      sma200,
+    };
+  });
 }

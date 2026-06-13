@@ -3,11 +3,20 @@
 
 import { prisma } from "../prisma";
 import { settings } from "../../config/settings";
-import { fetchDailyBars, mapPool } from "../yahoo";
+import { fetchDailyBars, fetchTickerStats, mapPool } from "../yahoo";
 import { runBackup } from "./backup";
+import { daysBetween, todayStr } from "../dates";
 
 export async function runPrices(opts: { backfillDays?: number } = {}): Promise<string> {
-  const sinceDays = opts.backfillDays ?? settings.prices.healWindowDays + 3;
+  // Heal whatever gap exists: widen the window to reach the latest stored close so
+  // any length of downtime self-repairs on the next run. --backfill=N overrides.
+  let sinceDays = opts.backfillDays;
+  if (sinceDays == null) {
+    const base = settings.prices.healWindowDays + 3;
+    const latest = await prisma.price.findFirst({ orderBy: { d: "desc" }, select: { d: true } });
+    const gap = latest ? daysBetween(latest.d, todayStr()) + 3 : base;
+    sinceDays = Math.min(365, Math.max(base, gap));
+  }
   const tickers = await prisma.ticker.findMany({
     where: { active: true },
     orderBy: { symbol: "asc" },
@@ -21,11 +30,13 @@ export async function runPrices(opts: { backfillDays?: number } = {}): Promise<s
   const empty: string[] = [];
 
   await mapPool(tickers, settings.prices.concurrency, settings.prices.staggerMs, async (t) => {
-    const { bars, name } = await fetchDailyBars(overrides.get(t.symbol) ?? t.symbol, sinceDays);
+    const yfSymbol = overrides.get(t.symbol) ?? t.symbol;
+    const { bars, name } = await fetchDailyBars(yfSymbol, sinceDays);
     if (bars.length === 0) {
       empty.push(t.symbol);
       return;
     }
+    const stats = await fetchTickerStats(yfSymbol);
     try {
       await prisma.$transaction(
         bars.map((b) =>
@@ -36,9 +47,30 @@ export async function runPrices(opts: { backfillDays?: number } = {}): Promise<s
           }),
         ),
       );
-      if (name && !t.name) {
-        await prisma.ticker.update({ where: { symbol: t.symbol }, data: { name } });
+
+      const dataToUpdate: any = {
+        name: name || undefined,
+        statsUpdatedAt: stats ? new Date() : undefined,
+      };
+      if (stats) {
+        dataToUpdate.marketCap = stats.marketCap;
+        dataToUpdate.forwardPE = stats.forwardPE;
+        dataToUpdate.trailingPE = stats.trailingPE;
+        dataToUpdate.profitMargin = stats.profitMargin;
+        dataToUpdate.revenueGrowth = stats.revenueGrowth;
+        dataToUpdate.fiftyTwoWeekHigh = stats.fiftyTwoWeekHigh;
+        dataToUpdate.fiftyTwoWeekLow = stats.fiftyTwoWeekLow;
+        dataToUpdate.beta = stats.beta;
+        dataToUpdate.eps = stats.eps;
+        dataToUpdate.dividendYield = stats.dividendYield;
+        dataToUpdate.yearChange = stats.yearChange;
       }
+
+      await prisma.ticker.update({
+        where: { symbol: t.symbol },
+        data: dataToUpdate,
+      });
+
       updated += 1;
       rows += bars.length;
     } catch {

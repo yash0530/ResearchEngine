@@ -50,11 +50,25 @@ model StageHistory {
 }
 
 model Ticker {
-  symbol      String         @id
-  class       TickerClass    @default(stock)
-  active      Boolean        @default(true)
-  name        String?
-  sectorLinks TickerSector[]
+  symbol           String         @id
+  class            TickerClass    @default(stock)
+  active           Boolean        @default(true)
+  name             String?
+  // Fundamental metrics
+  marketCap        Float?
+  forwardPE        Float?
+  trailingPE       Float?
+  profitMargin     Float?
+  revenueGrowth    Float?
+  fiftyTwoWeekHigh Float?
+  fiftyTwoWeekLow  Float?
+  beta             Float?
+  eps              Float?
+  dividendYield    Float?
+  yearChange       Float? // 52-week change
+  statsUpdatedAt   DateTime?
+
+  sectorLinks      TickerSector[]
 }
 
 model TickerSector {
