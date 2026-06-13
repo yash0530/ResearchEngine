@@ -433,18 +433,17 @@ export async function loadTickersTechnicals(): Promise<TickerTechnicals[]> {
     select: { symbol: true, d: true, close: true },
   });
 
-  const bySymbol = new Map<string, number[]>();
+  const bySymbol = new Map<string, CloseRow[]>();
   for (const price of prices) {
     let list = bySymbol.get(price.symbol);
-    if (!list) {
-      list = [];
-      bySymbol.set(price.symbol, list);
-    }
-    list.push(price.close);
+    if (!list) bySymbol.set(price.symbol, (list = []));
+    list.push({ d: price.d, close: price.close });
   }
 
   return tickers.map((t) => {
-    const closes = bySymbol.get(t.symbol) ?? [];
+    // Despike so screener indicators (RSI/MACD/Bollinger/SMA) match the rest of the app —
+    // raw closes would let a bad tick distort every indicator for that symbol.
+    const closes = despike(bySymbol.get(t.symbol) ?? []).map((r) => r.close);
     const recentCloses = closes.slice(-260);
 
     const lastClose = recentCloses.length > 0 ? recentCloses[recentCloses.length - 1] : null;
