@@ -5,6 +5,7 @@ import { runPrices } from "./prices";
 import { runBackup } from "./backup";
 import { runNews } from "./news";
 import { runEarnings } from "./earnings";
+import { runRulesJob } from "../rules/engine";
 
 export type JobOptions = { backfillDays?: number; dryRun?: boolean };
 export type JobFn = (opts: JobOptions) => Promise<string>;
@@ -14,7 +15,8 @@ export const JOBS: Record<string, JobFn> = {
   backup: () => runBackup(),
   news: () => runNews(),
   earnings: () => runEarnings(),
-  // M4 adds: rules · M5 adds: nightly, monthly, morning
+  rules: (opts) => runRulesJob({ dryRun: opts.dryRun }),
+  // M5 adds: nightly, monthly, morning
 };
 
 export const JOB_NAMES = Object.keys(JOBS);
