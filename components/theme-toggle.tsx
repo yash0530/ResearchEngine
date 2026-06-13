@@ -17,7 +17,9 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   // Read the real theme only after mount to avoid an SSR/CSR hydration mismatch.
+  // Setting state on mount is intentional here (client-only localStorage/matchMedia).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMode(currentMode());
     setMounted(true);
   }, []);
