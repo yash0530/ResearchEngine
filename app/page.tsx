@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowUpRight, CalendarDays, Sparkles } from "lucide-react";
 import { loadBoardPage, loadLatestDigest } from "@/lib/board";
+import { loadPositionContext } from "@/lib/research/positions";
 import type { DigestData } from "@/lib/research/synthesize";
 import { STAGES } from "@/config/sectors";
 import { SectorSparkline } from "@/components/sector-sparkline";
@@ -54,7 +55,7 @@ function InsightList({ insights }: { insights: DigestData["insights"] }) {
 }
 
 export default async function MorningPage() {
-  const [digest, board] = await Promise.all([loadLatestDigest(), loadBoardPage()]);
+  const [digest, board, posCtx] = await Promise.all([loadLatestDigest(), loadBoardPage(), loadPositionContext()]);
   const d = digest?.data ?? null;
   const stale = (d?.ageDays ?? board.ageDays ?? 0) > 3;
 
@@ -145,6 +146,45 @@ export default async function MorningPage() {
             <InsightList insights={d.insights} />
           </div>
         </>
+      )}
+
+      {posCtx && posCtx.items.length > 0 && (
+        <div className="panel panel-pad">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Your book</h2>
+            <span className="text-xs text-[var(--muted)]">{posCtx.items.length} positions · {posCtx.flaggedCount} flagged</span>
+          </div>
+          <div className="space-y-3">
+            {posCtx.items.map((item) => (
+              <div key={item.symbol} className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3 last:border-0 last:pb-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/tickers/${item.symbol}`} className="mono font-semibold hover:text-[var(--text)] transition">
+                      {item.symbol}
+                    </Link>
+                    <div className="flex items-center gap-1">
+                      {item.sectors.map((s) => (
+                        <StageChip key={s.code} stage={s.stage} />
+                      ))}
+                    </div>
+                    {item.topSeverity && <SeverityChip severity={item.topSeverity} />}
+                  </div>
+                  {item.flaggedBy.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {item.flaggedBy.map((f, i) => (
+                        <li key={i} className="text-xs text-[var(--muted)] leading-snug">• {f}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="text-right text-xs shrink-0">
+                  <div>30d: <Pct value={item.pct30d} /></div>
+                  <div className="text-[var(--muted)] mt-0.5">dd60: {item.drawdown60 !== null ? `${item.drawdown60}%` : "—"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Stage board — the live field map */}
