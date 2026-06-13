@@ -34,6 +34,16 @@ function sourceText(value: unknown): string | null {
   return null;
 }
 
+/** Google News titles end with " - Publisher"; store the headline alone. */
+function cleanTitle(title: string, source: string | null): string {
+  if (!source) return title;
+  for (const sep of [" - ", " – ", " — "]) {
+    const suffix = `${sep}${source}`;
+    if (title.endsWith(suffix)) return title.slice(0, -suffix.length).trim();
+  }
+  return title;
+}
+
 export async function runNews(): Promise<string> {
   let added = 0;
   const failed: string[] = [];
@@ -53,13 +63,14 @@ export async function runNews(): Promise<string> {
         const urlHash = createHash("sha1").update(item.link).digest("hex");
         const publishedRaw = item.isoDate ?? item.pubDate;
         const publishedAt = publishedRaw ? new Date(publishedRaw) : null;
+        const source = sourceText(item.sourceName);
         try {
           await prisma.newsItem.create({
             data: {
               urlHash,
               url: item.link,
-              title: item.title,
-              source: sourceText(item.sourceName),
+              title: cleanTitle(item.title, source),
+              source,
               sectorCode: sector.code,
               publishedAt:
                 publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
