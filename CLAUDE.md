@@ -30,7 +30,7 @@ zod · vitest. LLM calls use plain `fetch` — no SDKs.
 - `config/` — typed config: `sectors.ts` (12-sector taxonomy + seed tickers), `tripwires.ts` (signal rules), `providers.ts` (LLM profiles), `settings.ts`
 - `lib/jobs/` — ingestion jobs behind one registry (`registry.ts`) + `runner.ts` wrapper (JobRun row, never throws) + `overnight.ts` (the ordered ETL chain)
 - `lib/rules/` — pure tripwire evaluators over an injectable `RuleContext` (signals only — no paging)
-- `lib/research/` — deterministic `synthesize.ts` (stored facts → ranked insights, each with provenance) + optional `llm.ts` (narrates the digest over those facts)
+- `lib/research/` — deterministic `synthesize.ts` (stored facts → ranked insights, each with provenance) + optional `llm.ts` (narrates the digest) + read-only overlays `positions.ts` ("Your book") and `drivers.ts` (driver rollup/drill-down); the digest archive loads via `lib/digests.ts`
 - `lib/analyst/` — snapshot builder, two protocol adapters (anthropic, openai_compat), prompts, zod schemas, runner
 - `app/` — workstation UI; server components by default, mutations via `app/actions.ts`. Home (`/`) is the morning Digest.
 

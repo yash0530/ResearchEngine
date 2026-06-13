@@ -122,13 +122,16 @@ by the most recent `JobRun`.
 ## Pages
 
 **Morning** (the hero: the synthesized digest — ranked signals with provenance, the capex
-backdrop, an optional LLM editor's note — above the live stage board) · **Sector** (members
-table, news, catalysts, stage re-rate) · **Tickers** / **Ticker** (price chart, metrics,
-position, journal) · **Signals** (tripwire fires, acknowledge — surfaced, never pushed) ·
-**Briefs** (analyst archive with full audit trail) · **Calendar** (catalyst CRUD) · **News** ·
-**Journal** (positions + thesis / invalidation entries) · **Series** (the hand-entered
-fundamentals the tripwires read) · **Re-rate** (apply analyst stage proposals — the human-only
-action) · **Ops** (run jobs incl. the overnight pipeline, event mode, job log, backups).
+backdrop, an optional LLM editor's note, a "By driver" rollup, and a position-aware "Your
+book" overlay — above the live stage board) · **Sector** (members table, news, catalysts,
+stage re-rate, morning pulse) · **Driver** (`/drivers/[n]` — a driver's sectors + aggregate) ·
+**Tickers** / **Ticker** (price chart, metrics, position, journal) · **Signals** (tripwire
+fires, acknowledge — surfaced, never pushed) · **Digests** (`/digests` — the morning-digest
+archive) · **Briefs** (analyst archive with full audit trail) · **Calendar** (catalyst CRUD) ·
+**News** · **Journal** (positions + thesis / invalidation entries) · **Series** (the
+hand-entered fundamentals the tripwires read) · **Re-rate** (apply analyst stage proposals —
+the human-only action) · **Ops** (run jobs incl. the overnight pipeline, event mode, job log,
+backups).
 
 ## Workflow notes
 
