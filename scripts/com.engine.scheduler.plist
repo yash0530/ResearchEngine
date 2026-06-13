@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent for the ENGINE scheduler.
+
+  Install:
+    1. Edit WorkingDirectory + the cd path below to your absolute repo path.
+    2. cp scripts/com.engine.scheduler.plist ~/Library/LaunchAgents/
+    3. launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.engine.scheduler.plist
+    4. launchctl enable gui/$(id -u)/com.engine.scheduler   (first time only)
+
+  Logs: data/scheduler.log. A sleeping Mac won't fire 22:30 cron ticks — the 5-day
+  price healing window and the Ops "Run now" buttons are the recovery path.
+
+  Stop: launchctl bootout gui/$(id -u)/com.engine.scheduler
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.engine.scheduler</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/yash/Desktop/Programming/ResearchEngine &amp;&amp; exec npx tsx scripts/scheduler.ts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/yash/Desktop/Programming/ResearchEngine</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/yash/Desktop/Programming/ResearchEngine/data/scheduler.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/yash/Desktop/Programming/ResearchEngine/data/scheduler.log</string>
+</dict>
+</plist>
