@@ -276,3 +276,27 @@ traces to a number or a dated source; "research, not advice" stays on the surfac
 **Known follow-ups:** wire `gemini_strong` (3.5-flash) for the monthly re-rate once quota
 lands (one line); consider despiking at ingestion too (currently cleaned in analytics only);
 rotate the Gemini key that was shared in chat.
+
+---
+
+# POST-MERGE SESSION (autonomous, 2026-06-13 PM)
+
+Continued on `main` after the merge, in the Opus-orchestrates / agy-implements workflow.
+
+- **Pushed** to `origin/main` (work backed up; repo: github.com/yash0530/ResearchEngine).
+- **Live data:** real 400-day backfill (**131/131 symbols, 36,025 rows**) replaced the synthetic
+  set; ran the overnight pipeline so the digest reflects real data.
+- **Position-aware "Your book" overlay** (`21b2419`): built by the agy runner, reviewed by
+  Opus — review caught a despike-on-positions bug and fixed it before commit.
+- **"By driver" rollup** (`5dabf0d`): Driver-1 confirmed at 8/12 sectors, +23pp vs hyperscalers.
+- **Technicals-screener despike** (`8da6cd1`): RSI/MACD/Bollinger/SMA now use cleaned closes —
+  the last read path that was still on raw data. Chose this over destructive write-time
+  mutation (the real backfill already cleaned storage).
+
+**agy outcome (honest):** worked for the first feature, then went non-functional — two
+driver-rollup delegations (~35 min total) produced ZERO output (the wrapper kept spawning
+background tasks and exiting with "I'll wait"). Rather than loop on a broken tool I
+implemented those directly to the same gate bar (tsc + tests + build). **Recommend verifying
+the `agy` CLI install/auth before relying on it again.**
+
+**State:** `main` @ `8da6cd1`, pushed · 111 tests · build + smoke green · real data.
