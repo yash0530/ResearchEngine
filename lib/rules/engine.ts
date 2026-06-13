@@ -2,7 +2,7 @@
 // Prisma-bound context and runAllRules live at the bottom.
 
 import { prisma } from "../prisma";
-import { sendNtfy } from "../notify";
+import { ntfyEnabled, sendNtfy } from "../notify";
 import { drawdownFromCloses, getCloses, round2 } from "../metrics";
 import { addDaysStr, todayStr } from "../dates";
 import { TRIPWIRES } from "../../config/tripwires";
@@ -115,6 +115,8 @@ export type RulesRunResult = {
   evaluated: number;
   fired: Fired[];
   suppressed: string[];
+  /** Critical pushes that were attempted (channel configured) but failed to send. */
+  pushFailed: number;
 };
 
 export async function runAllRules(opts: { dryRun?: boolean } = {}): Promise<RulesRunResult> {
@@ -156,16 +158,30 @@ export async function runAllRules(opts: { dryRun?: boolean } = {}): Promise<Rule
           message: candidate.message,
         },
       });
-      await sendNtfy({
-        severity: candidate.severity,
-        title: "engine tripwire",
-        message: candidate.message,
-      });
     }
     fired.push(candidate);
   }
 
-  return { evaluated: TRIPWIRES.length, fired, suppressed };
+  // Routing: only criticals page immediately (coalesced into one push); warns ride
+  // the morning digest and infos are UI-only. Count delivery failures (only when the
+  // channel is actually configured) so a dead ntfy pipe surfaces in the JobRun detail.
+  let pushFailed = 0;
+  if (!opts.dryRun) {
+    const criticals = fired.filter((f) => f.severity === "critical");
+    if (criticals.length && ntfyEnabled()) {
+      const ok = await sendNtfy({
+        severity: "critical",
+        title:
+          criticals.length > 1
+            ? `engine · ${criticals.length} critical tripwires`
+            : "engine tripwire",
+        message: criticals.map((f) => f.message).join("\n"),
+      });
+      if (!ok) pushFailed = criticals.length;
+    }
+  }
+
+  return { evaluated: TRIPWIRES.length, fired, suppressed, pushFailed };
 }
 
 export async function runRulesJob(opts: { dryRun?: boolean } = {}): Promise<string> {
@@ -178,5 +194,8 @@ export async function runRulesJob(opts: { dryRun?: boolean } = {}): Promise<stri
   const suffix = result.suppressed.length
     ? `; cooloff-suppressed: ${result.suppressed.join(",")}`
     : "";
-  return `evaluated ${result.evaluated}${opts.dryRun ? " (dry-run)" : ""} — ${firedText}${suffix}`;
+  const pushNote = result.pushFailed
+    ? `; ntfy FAILED for ${result.pushFailed} critical alert(s)`
+    : "";
+  return `evaluated ${result.evaluated}${opts.dryRun ? " (dry-run)" : ""} — ${firedText}${suffix}${pushNote}`;
 }

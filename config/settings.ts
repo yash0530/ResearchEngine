@@ -31,7 +31,8 @@ export const settings = {
     keepDays: 7,
   },
   earnings: {
-    throttleMs: 500,
+    concurrency: 5,
+    staggerMs: 250,
   },
   backups: {
     dir: "data/backups",
@@ -42,8 +43,9 @@ export const settings = {
     prices: "30 22 * * *",
     news: "0 23 * * *",
     rules: "30 23 * * *",
-    nightly: "45 23 * * *", // monthly re-rate also runs here on the last day of the month
-    earnings: "0 10 * * 6",
+    nightly: "45 23 * * *",
+    monthly: "0 8 1 * *", // 1st of month 08:00 — decoupled from nightly (own cron + boot catch-up)
+    earnings: "0 6 * * *", // daily — a mid-week earnings date shouldn't wait for Saturday
     morning: "30 7 * * *",
     timezone: process.env.ENGINE_TZ || undefined,
   },

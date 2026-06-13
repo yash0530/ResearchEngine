@@ -8,6 +8,8 @@ import { MANUAL_SERIES, STAGES } from "@/config/sectors";
 import { sendNtfy } from "@/lib/notify";
 import { runJob } from "@/lib/jobs/runner";
 import { runAnalyst } from "@/lib/analyst/runner";
+import { fetchEarningsDates, fetchDailyBars, fetchTickerStats } from "@/lib/yahoo";
+import { todayStr } from "@/lib/dates";
 
 // ── Sectors / stages ─────────────────────────────────────────────────────────
 
@@ -268,7 +270,28 @@ export async function addTickerAction(input: {
       create: { symbol: v.symbol, sectorCode },
     });
   }
+
+  // Pull this name's upcoming earnings now so its catalyst shows immediately rather
+  // than waiting for the next daily sweep. Best-effort — never break the add.
+  try {
+    const override = await prisma.symbolOverride.findUnique({ where: { symbol: v.symbol } });
+    const today = todayStr();
+    const dates = (await fetchEarningsDates(override?.yfSymbol ?? v.symbol)).filter((d) => d >= today);
+    for (const d of dates) {
+      const title = `${v.symbol} earnings`;
+      const existing = await prisma.catalyst.findFirst({
+        where: { d, kind: "earnings", symbol: v.symbol, title },
+      });
+      if (!existing) {
+        await prisma.catalyst.create({ data: { d, kind: "earnings", symbol: v.symbol, title } });
+      }
+    }
+  } catch {
+    // the daily earnings job will fill this in regardless
+  }
+
   revalidatePath("/tickers");
+  revalidatePath("/calendar");
 }
 
 export async function setTickerActiveAction(input: { symbol: string; active: boolean }) {
@@ -295,6 +318,12 @@ export async function setSymbolOverrideAction(input: { symbol: string; yfSymbol:
   revalidatePath("/tickers");
 }
 
+export async function deleteSymbolOverrideAction(symbol: string) {
+  const cleanSymbol = symbol.trim().toUpperCase();
+  await prisma.symbolOverride.deleteMany({ where: { symbol: cleanSymbol } });
+  revalidatePath("/tickers");
+}
+
 // ── Ops ──────────────────────────────────────────────────────────────────────
 
 export async function testNtfyAction(): Promise<boolean> {
@@ -311,4 +340,103 @@ export async function runEventModeAction(event: string): Promise<{ ok: boolean; 
   revalidatePath("/briefs");
   revalidatePath("/ops");
   return result;
+}
+
+export async function resetDatabaseAction(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const { execSync } = await import("node:child_process");
+
+    // Wipe tables in correct order to respect constraints
+    await prisma.$transaction([
+      prisma.price.deleteMany(),
+      prisma.newsItem.deleteMany(),
+      prisma.catalyst.deleteMany(),
+      prisma.manualSeries.deleteMany(),
+      prisma.ruleEvent.deleteMany(),
+      prisma.position.deleteMany(),
+      prisma.journalEntry.deleteMany(),
+      prisma.jobRun.deleteMany(),
+      prisma.symbolOverride.deleteMany(),
+      prisma.stageHistory.deleteMany(),
+      prisma.tickerSector.deleteMany(),
+      prisma.ticker.deleteMany(),
+      prisma.sector.deleteMany(),
+    ]);
+
+    // Run seed script to recreate taxonomy
+    execSync("npx tsx prisma/seed.ts");
+
+    revalidatePath("/");
+    revalidatePath("/tickers");
+    revalidatePath("/calendar");
+    revalidatePath("/journal");
+    revalidatePath("/rerate");
+    revalidatePath("/ops");
+    revalidatePath("/alerts");
+    revalidatePath("/series");
+
+    return { ok: true, detail: "Database wiped and successfully reseeded." };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : "Reset failed" };
+  }
+}
+
+export async function refreshTickerDataAction(symbol: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const cleanSymbol = symbol.trim().toUpperCase();
+    const ticker = await prisma.ticker.findUnique({ where: { symbol: cleanSymbol } });
+    if (!ticker) {
+      return { ok: false, detail: `Ticker ${cleanSymbol} not found.` };
+    }
+    const override = await prisma.symbolOverride.findUnique({ where: { symbol: cleanSymbol } });
+    const yfSymbol = override?.yfSymbol ?? cleanSymbol;
+
+    const { bars, name } = await fetchDailyBars(yfSymbol, 365);
+    if (bars.length === 0) {
+      return { ok: false, detail: `No daily price bars returned from Yahoo Finance for ${yfSymbol}.` };
+    }
+
+    const stats = await fetchTickerStats(yfSymbol);
+
+    await prisma.$transaction(
+      bars.map((b) =>
+        prisma.price.upsert({
+          where: { symbol_d: { symbol: cleanSymbol, d: b.d } },
+          update: { close: b.close, volume: b.volume },
+          create: { symbol: cleanSymbol, d: b.d, close: b.close, volume: b.volume },
+        })
+      )
+    );
+
+    const dataToUpdate: any = {
+      name: name || undefined,
+      statsUpdatedAt: new Date(),
+    };
+    if (stats) {
+      dataToUpdate.marketCap = stats.marketCap;
+      dataToUpdate.forwardPE = stats.forwardPE;
+      dataToUpdate.trailingPE = stats.trailingPE;
+      dataToUpdate.profitMargin = stats.profitMargin;
+      dataToUpdate.revenueGrowth = stats.revenueGrowth;
+      dataToUpdate.fiftyTwoWeekHigh = stats.fiftyTwoWeekHigh;
+      dataToUpdate.fiftyTwoWeekLow = stats.fiftyTwoWeekLow;
+      dataToUpdate.beta = stats.beta;
+      dataToUpdate.eps = stats.eps;
+      dataToUpdate.dividendYield = stats.dividendYield;
+      dataToUpdate.yearChange = stats.yearChange;
+    }
+
+    await prisma.ticker.update({
+      where: { symbol: cleanSymbol },
+      data: dataToUpdate,
+    });
+
+    revalidatePath(`/tickers/${cleanSymbol}`);
+    revalidatePath("/tickers");
+    revalidatePath("/");
+
+    return { ok: true, detail: `Successfully refreshed data for ${cleanSymbol}.` };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : "Refresh failed" };
+  }
 }

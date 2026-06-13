@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
-import { runEventModeAction, testNtfyAction } from "@/app/actions";
+import { runEventModeAction, testNtfyAction, resetDatabaseAction } from "@/app/actions";
 
 const JOB_BUTTONS: { name: string; label: string; note?: string }[] = [
   { name: "prices", label: "Prices", note: "daily closes + backup" },
@@ -17,9 +18,35 @@ const JOB_BUTTONS: { name: string; label: string; note?: string }[] = [
 ];
 
 export function OpsClient() {
+  const router = useRouter();
   const [running, setRunning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [event, setEvent] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  async function handleReset() {
+    if (
+      !confirm(
+        "Are you sure you want to hard reset the database? This will wipe all pricing, news, briefs, rules, and custom positions/journals, and re-seed the default taxonomy."
+      )
+    ) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const result = await resetDatabaseAction();
+      if (result.ok) {
+        toast.success(result.detail);
+        router.refresh();
+      } else {
+        toast.error(result.detail);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function runJob(name: string) {
     setRunning(name);
@@ -28,6 +55,7 @@ export function OpsClient() {
       const data = (await res.json()) as { ok: boolean; detail: string };
       if (data.ok) toast.success(`${name}: ${data.detail}`, { duration: 8000 });
       else toast.error(`${name}: ${data.detail}`, { duration: 10000 });
+      router.refresh();
     } catch (error) {
       toast.error(`${name}: ${error instanceof Error ? error.message : "failed"}`);
     } finally {
@@ -35,7 +63,7 @@ export function OpsClient() {
     }
   }
 
-  function testNtfy() {
+  const testNtfy = () => {
     startTransition(async () => {
       const ok = await testNtfyAction();
       if (ok) toast.success("ntfy push sent — check your phone");
@@ -50,6 +78,7 @@ export function OpsClient() {
         if (result.ok) {
           toast.success(`Event analysis: ${result.detail}`, { duration: 8000 });
           setEvent("");
+          router.refresh();
         } else {
           toast.error(`Event analysis: ${result.detail}`, { duration: 10000 });
         }
@@ -109,12 +138,27 @@ export function OpsClient() {
 
       <div className="panel panel-pad">
         <h2 className="mb-2 text-sm font-semibold">Notifications</h2>
-        <button type="button" className="btn" disabled={pending} onClick={testNtfy}>
+        <button type="button" className="btn" disabled={pending || resetting} onClick={testNtfy}>
           Send test push
         </button>
         <p className="muted mt-2 text-xs">
           Configure NTFY_ENABLED / NTFY_TOPIC in .env and subscribe to the topic in the ntfy app.
         </p>
+      </div>
+
+      <div className="panel panel-pad border-[color-mix(in_srgb,var(--bad)_40%,transparent)] bg-[color-mix(in_srgb,var(--bad)_3%,transparent)]">
+        <h2 className="mb-2 text-sm font-semibold text-[var(--bad)]">Database Reset</h2>
+        <p className="muted mb-3 text-xs">
+          Wipes the SQLite database completely, drops all custom positions/journals, and re-seeds the default 12-sector AI-infrastructure taxonomy, seed tickers, and static catalysts.
+        </p>
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={resetting || running !== null || pending}
+          onClick={handleReset}
+        >
+          {resetting ? "Resetting database…" : "Reset Database"}
+        </button>
       </div>
     </div>
   );

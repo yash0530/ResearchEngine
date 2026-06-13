@@ -4,6 +4,12 @@ import { settings } from "../config/settings";
 
 const PRIORITY: Record<string, string> = { info: "3", warn: "4", critical: "5" };
 
+/** True when a push would actually be attempted (enabled + a topic set) — lets
+ *  callers tell "not configured" apart from "tried and failed". */
+export function ntfyEnabled(): boolean {
+  return settings.ntfy.enabled && !!settings.ntfy.topic;
+}
+
 export async function sendNtfy(opts: {
   message: string;
   title?: string;
